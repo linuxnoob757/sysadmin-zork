@@ -1,0 +1,15 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+build/
+dist/
+
+# ---- Sysadmin Zork ----
+# Player progress & profiles (secrets, connection details, HMAC keys)
+profiles/
+# Local spike / dev config pointing at a real VM
+spike.local.json
