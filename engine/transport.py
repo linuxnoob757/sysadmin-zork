@@ -227,6 +227,42 @@ class FakeTransport:
         self._history.append(command)
         cmd = command.strip()
 
+        # Output redirection: `<cmd> > path` or `<cmd> >> path`. Model the two
+        # the game/levels actually use: `echo TEXT > path` and `touch ... > path`
+        # is unusual, so handle echo-redirect and generic-append here.
+        if ">>" in cmd or (">" in cmd and not cmd.startswith("test ")):
+            append = ">>" in cmd
+            op = ">>" if append else ">"
+            left, _, right = cmd.partition(op)
+            path = right.strip()
+            left = left.strip()
+            # determine the content being written
+            if left.startswith("echo "):
+                content = left[len("echo ") :]
+                # strip surrounding quotes if present
+                if len(content) >= 2 and content[0] in "'\"" and content[-1] == content[0]:
+                    content = content[1:-1]
+                content = content + "\n"
+            elif left.startswith("cat ") and left[len("cat "):].strip() in self.files:
+                content = self.files[left[len("cat "):].strip()]
+            else:
+                content = ""
+            if append and path in self.files:
+                self.files[path] = self.files[path] + content
+            else:
+                self.files[path] = content
+            return CommandResult(0, "", "")
+
+        # `touch <path>` (possibly multiple) -- create empty files
+        if cmd.startswith("touch "):
+            for path in cmd[len("touch ") :].split():
+                self.files.setdefault(path, "")
+            return CommandResult(0, "", "")
+
+        # `mkdir -p <path>` / `mkdir <path>` -- no real dirs modeled; succeed
+        if cmd.startswith("mkdir"):
+            return CommandResult(0, "", "")
+
         # `test -f <path>` / `test ! -f <path>` -- existence checks (exit code)
         if cmd.startswith("test -f "):
             path = cmd[len("test -f ") :].strip()

@@ -121,6 +121,54 @@ def _cmd_prologue(args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_play(args: argparse.Namespace) -> int:
+    from engine.game import Game
+    from engine.level import build_mvp_ladder
+    from engine.narrator import Narrator
+    from engine.profile import Profile
+
+    profile = Profile.load(args.profile)
+    campaign = build_mvp_ladder()
+    narrator = Narrator()
+
+    if args.fake:
+        from engine.transport import FakeTransport
+        from engine.vm import FakeHypervisor, Sandbox
+
+        transport = FakeTransport()
+        transport.connect()
+        hypervisor = FakeHypervisor(transport)
+        sandbox = Sandbox(transport, hypervisor)
+        hypervisor.take_snapshot(profile.connection.baseline_snapshot)
+    else:
+        if not profile.prologue_complete or not profile.connection.is_complete():
+            print(
+                "No provisioned VM in this profile. Run the prologue first:\n"
+                "    python -m engine prologue\n"
+                "Or try the game logic against fakes:  python -m engine play --fake",
+                file=sys.stderr,
+            )
+            return 2
+        from engine.transport import SSHTransport
+        from engine.vm import Sandbox, VBoxHypervisor
+
+        conn = profile.connection
+        transport = SSHTransport(host=conn.host, user=conn.user, key_path=conn.key_path, port=conn.port)
+        hypervisor = VBoxHypervisor(conn.vm_name, vboxmanage=conn.vboxmanage)
+        sandbox = Sandbox(transport, hypervisor)
+        transport.connect()
+
+    game = Game(campaign=campaign, profile=profile, sandbox=sandbox, narrator=narrator)
+    try:
+        game.play(start_level_id=args.level)
+    finally:
+        try:
+            sandbox.transport.close()
+        except Exception:
+            pass
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="engine", description="Sysadmin Zork engine.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -135,6 +183,12 @@ def main(argv: list[str] | None = None) -> int:
     prologue_p.add_argument("--profile", default="default", help="Player profile name.")
     prologue_p.add_argument("--vboxmanage", help="Full path to VBoxManage(.exe) if not on PATH.")
     prologue_p.set_defaults(func=_cmd_prologue)
+
+    play_p = sub.add_parser("play", help="Play the game (Phase 2 engine core).")
+    play_p.add_argument("--profile", default="default", help="Player profile name.")
+    play_p.add_argument("--level", help="Start at a specific level id (default: next unlocked).")
+    play_p.add_argument("--fake", action="store_true", help="Play against fakes (no VM needed).")
+    play_p.set_defaults(func=_cmd_play)
 
     args = parser.parse_args(argv)
     return args.func(args)
