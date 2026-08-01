@@ -70,12 +70,16 @@ class SSHTransport:
         *,
         port: int = 22,
         connect_timeout: float = 15.0,
+        retries: int = 4,
+        retry_delay: float = 2.0,
     ) -> None:
         self.host = host
         self.user = user
         self.key_path = key_path
         self.port = port
         self.connect_timeout = connect_timeout
+        self.retries = retries
+        self.retry_delay = retry_delay
         self._client = None  # lazy: paramiko only imported/used for real runs
 
     def connect(self) -> None:
@@ -89,18 +93,37 @@ class SSHTransport:
                 "Install it (`uv pip install paramiko`) or use --fake."
             ) from exc
 
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(
-            hostname=self.host,
-            port=self.port,
-            username=self.user,
-            key_filename=self.key_path,
-            timeout=self.connect_timeout,
-            allow_agent=False,
-            look_for_keys=False,
+        import time
+
+        last_exc: Exception | None = None
+        for attempt in range(1, self.retries + 1):
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            try:
+                client.connect(
+                    hostname=self.host,
+                    port=self.port,
+                    username=self.user,
+                    key_filename=self.key_path,
+                    timeout=self.connect_timeout,
+                    banner_timeout=self.connect_timeout,
+                    auth_timeout=self.connect_timeout,
+                    allow_agent=False,
+                    look_for_keys=False,
+                )
+                self._client = client
+                return
+            except paramiko.SSHException as exc:
+                # Transient on freshly-booted VMs: sshd is slow to send its
+                # banner. Close, wait, and retry a few times before giving up.
+                last_exc = exc
+                client.close()
+                if attempt < self.retries:
+                    time.sleep(self.retry_delay)
+        raise RuntimeError(
+            f"SSH connect to {self.user}@{self.host}:{self.port} failed after "
+            f"{self.retries} attempts: {last_exc}"
         )
-        self._client = client
 
     def run(self, command: str, *, timeout: float | None = None) -> CommandResult:
         if self._client is None:

@@ -65,8 +65,9 @@ def run_spike(sandbox: Sandbox, *, log=print) -> SpikeReport:
     # 2. Take the baseline snapshot (clean state, no marker).
     log(f"[2/5] Taking snapshot {BASELINE_SNAPSHOT!r}...")
     sandbox.snapshot(BASELINE_SNAPSHOT)
-    snapshot_taken = BASELINE_SNAPSHOT in sandbox.hypervisor.list_snapshots()
-    log(f"      -> snapshots now: {sandbox.hypervisor.list_snapshots()}")
+    snaps = sandbox.hypervisor.list_snapshots()
+    snapshot_taken = BASELINE_SNAPSHOT in snaps
+    log(f"      -> baseline snapshot present: {snapshot_taken}")
 
     # 3. Make a destructive change AFTER the snapshot.
     log(f"[3/5] Creating marker file {MARKER_PATH} (the 'damage')...")
@@ -78,6 +79,11 @@ def run_spike(sandbox: Sandbox, *, log=print) -> SpikeReport:
     # 4. Restore the clean snapshot.
     log(f"[4/5] Restoring snapshot {BASELINE_SNAPSHOT!r} (the 'reset')...")
     sandbox.reset_to(BASELINE_SNAPSHOT)
+
+    # A real restore power-cycles the VM, killing the SSH session -- reconnect
+    # to the rebooted box before we can inspect it. (No-op-ish on fakes.)
+    log("      -> reconnecting after reset...")
+    sandbox.reconnect()
 
     # 5. The whole point: the marker must be gone.
     log("[5/5] Checking that the marker is gone after restore...")
