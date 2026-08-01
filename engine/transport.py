@@ -57,9 +57,11 @@ class Transport(Protocol):
 class SSHTransport:
     """Talks to a real VM over SSH using key-based auth.
 
-    Password auth is intentionally unsupported: the game hardens the VM to
-    keys-only in Tier 4, and the engine should live by the same rules it
-    teaches.
+    Auth is key-based for normal play (the game hardens the VM to keys-only in
+    Tier 4, and the engine lives by the rules it teaches). A one-time
+    `password` may be supplied so the prologue can make its very first
+    connection and install the engine's public key; after that, key auth is
+    used everywhere.
     """
 
     def __init__(
@@ -69,6 +71,7 @@ class SSHTransport:
         key_path: str,
         *,
         port: int = 22,
+        password: str | None = None,
         connect_timeout: float = 15.0,
         retries: int = 4,
         retry_delay: float = 2.0,
@@ -77,6 +80,7 @@ class SSHTransport:
         self.user = user
         self.key_path = key_path
         self.port = port
+        self.password = password
         self.connect_timeout = connect_timeout
         self.retries = retries
         self.retry_delay = retry_delay
@@ -95,24 +99,35 @@ class SSHTransport:
 
         import time
 
+        # Password mode (first prologue handshake) vs key mode (everything else).
+        use_password = bool(self.password)
+
         last_exc: Exception | None = None
         for attempt in range(1, self.retries + 1):
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             try:
-                client.connect(
+                kwargs = dict(
                     hostname=self.host,
                     port=self.port,
                     username=self.user,
-                    key_filename=self.key_path,
                     timeout=self.connect_timeout,
                     banner_timeout=self.connect_timeout,
                     auth_timeout=self.connect_timeout,
                     allow_agent=False,
                     look_for_keys=False,
                 )
+                if use_password:
+                    kwargs["password"] = self.password
+                else:
+                    kwargs["key_filename"] = self.key_path
+                client.connect(**kwargs)
                 self._client = client
                 return
+            except paramiko.AuthenticationException:
+                # A real credential problem -- retrying won't fix it.
+                client.close()
+                raise
             except paramiko.SSHException as exc:
                 # Transient on freshly-booted VMs: sshd is slow to send its
                 # banner. Close, wait, and retry a few times before giving up.
@@ -124,6 +139,25 @@ class SSHTransport:
             f"SSH connect to {self.user}@{self.host}:{self.port} failed after "
             f"{self.retries} attempts: {last_exc}"
         )
+
+    def append_authorized_key(self, public_key: str) -> None:
+        """Install an SSH public key into the connected user's authorized_keys.
+
+        Idempotent, and fixes perms + SELinux context (the latter matters on
+        RHEL -- without restorecon, sshd refuses the key). This is the prologue
+        handshake step that flips the VM from password auth to key auth.
+        """
+        pub = public_key.strip().replace("'", "'\\''")
+        script = (
+            "mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
+            f"(grep -qxF '{pub}' ~/.ssh/authorized_keys 2>/dev/null || "
+            f"echo '{pub}' >> ~/.ssh/authorized_keys) && "
+            "chmod 600 ~/.ssh/authorized_keys && "
+            "restorecon -R ~/.ssh 2>/dev/null || true"
+        )
+        result = self.run(script)
+        if not result.ok:
+            raise RuntimeError(f"Failed to install public key: {result.stderr}")
 
     def run(self, command: str, *, timeout: float | None = None) -> CommandResult:
         if self._client is None:
@@ -159,17 +193,29 @@ class FakeTransport:
     """A tiny in-memory stand-in for a Linux VM.
 
     It models just enough of a filesystem and a handful of commands to prove
-    the spike loop: writing a marker file, checking whether it exists, and
+    the spike loop AND the prologue handshake: writing/checking a marker file,
+    sudo, SELinux state, sshd enablement, installing an authorized_key, and
     -- crucially -- having its entire state snapshotted and restored by
     `FakeHypervisor`. It is NOT a real shell; it recognizes only the specific
-    commands the spike uses.
+    commands the engine issues.
     """
 
     files: dict[str, str] = field(default_factory=dict)
     connected: bool = False
+    # Prologue knobs: emulate a VM that (optionally) needs a password first and
+    # has the student user in the wheel group (sudo works).
+    password: str | None = None
+    expected_password: str | None = None
+    has_sudo: bool = True
+    passwordless_sudo: bool = False
+    authorized_keys: list[str] = field(default_factory=list)
     _history: list[str] = field(default_factory=list)
 
     def connect(self) -> None:
+        # If the fake VM expects a password and one is set, it must match.
+        if self.expected_password is not None and self.password is not None:
+            if self.password != self.expected_password:
+                raise RuntimeError("Authentication failed (fake): bad password")
         self.connected = True
 
     def _require_connected(self) -> None:
@@ -202,6 +248,31 @@ class FakeTransport:
                 return CommandResult(0, self.files[path], "")
             return CommandResult(1, "", f"cat: {path}: No such file or directory")
 
+        # `sudo whoami` / `sudo -n whoami` -- succeeds as root iff passwordless
+        if cmd in ("sudo whoami", "sudo -n whoami"):
+            if self.has_sudo and self.passwordless_sudo:
+                return CommandResult(0, "root\n", "")
+            return CommandResult(1, "", "sudo: a password is required")
+
+        # `sudo -n true` -- passwordless-sudo probe
+        if cmd == "sudo -n true":
+            return CommandResult(0 if (self.has_sudo and self.passwordless_sudo) else 1, "", "")
+
+        # `id -nG` / `groups` -- group membership (wheel confers sudo on RHEL)
+        if cmd in ("id -nG", "groups"):
+            groups = "student"
+            if self.has_sudo:
+                groups += " wheel"
+            return CommandResult(0, groups + "\n", "")
+
+        # `getenforce` -- SELinux status (RHEL default)
+        if cmd == "getenforce":
+            return CommandResult(0, "Enforcing\n", "")
+
+        # sshd enablement check
+        if "is-enabled sshd" in cmd:
+            return CommandResult(0, "enabled\n", "")
+
         # `echo hello` / `echo <x>` -- echo its argument
         if cmd.startswith("echo "):
             return CommandResult(0, cmd[len("echo ") :] + "\n", "")
@@ -209,6 +280,16 @@ class FakeTransport:
         # `whoami`
         if cmd == "whoami":
             return CommandResult(0, "student\n", "")
+
+        # The authorized_key install script (multi-part, joined by &&). Detect it
+        # by signature and record the key so tests can assert it was installed.
+        if "authorized_keys" in cmd and "echo '" in cmd:
+            start = cmd.index("echo '") + len("echo '")
+            end = cmd.index("'", start)
+            key = cmd[start:end].replace("'\\''", "'")
+            if key not in self.authorized_keys:
+                self.authorized_keys.append(key)
+            return CommandResult(0, "", "")
 
         # `true` / `false`
         if cmd == "true":
@@ -218,6 +299,13 @@ class FakeTransport:
 
         # Unknown command: behave like a shell that can't find it.
         return CommandResult(127, "", f"{cmd.split()[0] if cmd else ''}: command not found")
+
+    def append_authorized_key(self, public_key: str) -> None:
+        """Mirror of SSHTransport.append_authorized_key for the fake VM."""
+        self._require_connected()
+        key = public_key.strip()
+        if key not in self.authorized_keys:
+            self.authorized_keys.append(key)
 
     def put_file(self, remote_path: str, content: str, *, mode: int = 0o644) -> None:
         self._require_connected()

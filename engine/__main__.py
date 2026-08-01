@@ -2,14 +2,16 @@
 
     python -m engine spike --fake
     python -m engine spike --host H --user U --key ~/.ssh/id_ed25519 --vm NAME
+    python -m engine prologue --vm NAME     (guided VM-install first mission)
 
-Phase 0 exposes exactly one subcommand: `spike`.
+Subcommands: `spike` (Phase 0), `prologue` (Phase 1).
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 
 def _add_spike_args(p: argparse.ArgumentParser) -> None:
@@ -74,12 +76,65 @@ def _cmd_spike(args: argparse.Namespace) -> int:
     return 1
 
 
+def _ensure_keypair(key_path: Path) -> str:
+    """Ensure an SSH keypair exists at key_path; return the public key text."""
+    pub_path = key_path.with_suffix(key_path.suffix + ".pub") if key_path.suffix else Path(str(key_path) + ".pub")
+    if key_path.exists() and pub_path.exists():
+        return pub_path.read_text(encoding="utf-8").strip()
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    import subprocess
+
+    subprocess.run(
+        ["ssh-keygen", "-t", "ed25519", "-f", str(key_path), "-N", "", "-C", "sysadmin-zork-engine"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return pub_path.read_text(encoding="utf-8").strip()
+
+
+def _cmd_prologue(args: argparse.Namespace) -> int:
+    from engine.narrator import Narrator
+    from engine.profile import Profile
+    from engine.prologue import run_prologue
+
+    key_path = Path(args.key).expanduser() if args.key else (Path.home() / ".ssh" / "sysadmin-zork")
+    try:
+        public_key = _ensure_keypair(key_path)
+    except Exception as exc:
+        print(f"Could not create/read SSH key at {key_path}: {exc}", file=sys.stderr)
+        return 1
+
+    profile = Profile.load(args.profile)
+    narrator = Narrator()
+    result = run_prologue(
+        narrator,
+        profile=profile,
+        public_key=public_key,
+        key_path=str(key_path),
+        vm_name=args.vm,
+        vboxmanage=args.vboxmanage,
+    )
+    if result.complete:
+        return 0
+    print("\nPrologue did not complete. See messages above.", file=sys.stderr)
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="engine", description="Sysadmin Zork engine.")
     sub = parser.add_subparsers(dest="command", required=True)
+
     spike_p = sub.add_parser("spike", help="Run the Phase 0 VM/SSH/snapshot spike.")
     _add_spike_args(spike_p)
     spike_p.set_defaults(func=_cmd_spike)
+
+    prologue_p = sub.add_parser("prologue", help="Run the guided VM-install prologue (Phase 1).")
+    prologue_p.add_argument("--vm", default="sysadmin-zork", help="VirtualBox VM name.")
+    prologue_p.add_argument("--key", help="SSH private key path (created if absent).")
+    prologue_p.add_argument("--profile", default="default", help="Player profile name.")
+    prologue_p.add_argument("--vboxmanage", help="Full path to VBoxManage(.exe) if not on PATH.")
+    prologue_p.set_defaults(func=_cmd_prologue)
 
     args = parser.parse_args(argv)
     return args.func(args)
