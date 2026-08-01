@@ -159,6 +159,30 @@ class SSHTransport:
         if not result.ok:
             raise RuntimeError(f"Failed to install public key: {result.stderr}")
 
+    def enable_passwordless_sudo(self, password: str, *, user: str | None = None) -> bool:
+        """Install a sudoers drop-in granting the user passwordless sudo.
+
+        The engine runs privileged setup/reset commands (create system paths,
+        break/repair services) non-interactively over SSH. The player already
+        holds sudo; this only removes the interactive prompt for the account
+        that's already an administrator -- the standard automated-provisioning
+        pattern on a dedicated throwaway VM. Uses `sudo -S` (password on stdin)
+        the one time we have the password, then validates with `visudo -c`.
+        """
+        who = user or self.user
+        drop = f"{who} ALL=(ALL) NOPASSWD: ALL"
+        # write via tee under sudo -S; validate the specific file with visudo -c
+        pw = password.replace("'", "'\\''")
+        script = (
+            f"echo '{pw}' | sudo -S sh -c "
+            f"\"echo '{drop}' > /etc/sudoers.d/sysadmin-zork && "
+            f"chmod 440 /etc/sudoers.d/sysadmin-zork && "
+            f"visudo -cf /etc/sudoers.d/sysadmin-zork\" 2>/dev/null"
+        )
+        result = self.run(script)
+        # Confirm it actually works now, without a password.
+        return result.ok and self.run("sudo -n true").ok
+
     def run(self, command: str, *, timeout: float | None = None) -> CommandResult:
         if self._client is None:
             raise RuntimeError("connect() must be called before run().")
@@ -227,6 +251,16 @@ class FakeTransport:
         self._history.append(command)
         cmd = command.strip()
 
+        # Transparently strip a leading `sudo` (and `sudo -n`) so setup commands
+        # that run privileged on the real VM still work against the fake. Keep
+        # the sudo-probe commands intact so they exercise the sudo model below.
+        _sudo_probes = ("sudo whoami", "sudo -n whoami", "sudo -n true")
+        if cmd not in _sudo_probes:
+            if cmd.startswith("sudo -n "):
+                cmd = cmd[len("sudo -n ") :].strip()
+            elif cmd.startswith("sudo "):
+                cmd = cmd[len("sudo ") :].strip()
+
         # Output redirection: `<cmd> > path` or `<cmd> >> path`. Model the two
         # the game/levels actually use: `echo TEXT > path` and `touch ... > path`
         # is unusual, so handle echo-redirect and generic-append here.
@@ -261,6 +295,10 @@ class FakeTransport:
 
         # `mkdir -p <path>` / `mkdir <path>` -- no real dirs modeled; succeed
         if cmd.startswith("mkdir"):
+            return CommandResult(0, "", "")
+
+        # `chown ...` / `chmod ...` -- ownership/perms not modeled; succeed
+        if cmd.startswith("chown") or cmd.startswith("chmod"):
             return CommandResult(0, "", "")
 
         # `test -f <path>` / `test ! -f <path>` -- existence checks (exit code)
@@ -342,6 +380,20 @@ class FakeTransport:
         key = public_key.strip()
         if key not in self.authorized_keys:
             self.authorized_keys.append(key)
+
+    def enable_passwordless_sudo(self, password: str, *, user: str | None = None) -> bool:
+        """Mirror of SSHTransport.enable_passwordless_sudo for the fake VM.
+
+        Succeeds (and flips passwordless_sudo on) only if the user has sudo and
+        the supplied password matches the fake's expected password.
+        """
+        self._require_connected()
+        if not self.has_sudo:
+            return False
+        if self.expected_password is not None and password != self.expected_password:
+            return False
+        self.passwordless_sudo = True
+        return True
 
     def put_file(self, remote_path: str, content: str, *, mode: int = 0o644) -> None:
         self._require_connected()

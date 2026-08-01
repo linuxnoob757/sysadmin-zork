@@ -60,6 +60,15 @@ def run_checks(sandbox: Sandbox, level: Level) -> CheckReport:
 
 
 def apply_setup(sandbox: Sandbox, level: Level) -> None:
-    """Run a level's setup commands to break the box into the puzzle state."""
+    """Run a level's setup commands to break the box into the puzzle state.
+
+    Setup is engine-authored and typically modifies system paths/services, so
+    each command runs under sudo. This relies on the engine's passwordless-sudo
+    drop-in installed during the prologue (see SSHTransport.enable_passwordless_sudo).
+    A command may opt out of sudo by starting with '@' (run as the plain user).
+    """
     for cmd in level.setup:
-        sandbox.run(cmd)
+        if cmd.startswith("@"):
+            sandbox.run(cmd[1:].lstrip())
+        else:
+            sandbox.run(f"sudo {cmd}")

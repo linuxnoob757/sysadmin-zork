@@ -187,3 +187,24 @@ def test_narrator_scripting_records_output():
     n.say("hello")
     assert n.confirm("proceed?") is True
     assert "hello" in n.text
+
+
+def test_prologue_installs_passwordless_sudo(tmp_path):
+    vm, tf, hv, hvf = _factories(expected_password="student123")
+    profile = Profile(name="pwless")
+    narrator = ScriptedNarrator(HAPPY_ANSWERS)
+
+    result = run_prologue(
+        narrator,
+        profile=profile,
+        public_key=PUBKEY,
+        key_path="/keys/zork",
+        vm_name="sysadmin-zork",
+        transport_factory=tf,
+        hypervisor_factory=hvf,
+        profiles_dir=tmp_path,
+        skip_hypervisor_check=True,
+    )
+    assert result.complete
+    # the fake VM now has passwordless sudo enabled by the prologue
+    assert vm.passwordless_sudo is True

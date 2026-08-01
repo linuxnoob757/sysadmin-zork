@@ -155,3 +155,24 @@ def test_progress_persists_across_restart(tmp_path):
     prog = Progression(build_mvp_ladder(), reloaded)
     assert prog.is_cleared("t0_l1_first_shift")
     assert prog.next_unlocked_level().id == "t1_l1_lost_in_the_filesystem"
+
+
+def test_apply_setup_uses_sudo_and_honors_at_optout():
+    from engine.checker import apply_setup
+    from engine.level import Level
+
+    _, transport, _ = _make_game(["quit"])
+    from engine.vm import Sandbox, FakeHypervisor
+    sandbox = Sandbox(transport, FakeHypervisor(transport))
+
+    lvl = Level(
+        id="x", tier=9, order=1, title="x",
+        setup=["mkdir -p /srv/thing", "@echo hi > /home/student/note"],
+    )
+    apply_setup(sandbox, lvl)
+    history = transport._history
+    # privileged command got a sudo prefix
+    assert any(h == "sudo mkdir -p /srv/thing" for h in history)
+    # @-prefixed command ran WITHOUT sudo
+    assert any(h == "echo hi > /home/student/note" for h in history)
+    assert not any(h == "sudo echo hi > /home/student/note" for h in history)

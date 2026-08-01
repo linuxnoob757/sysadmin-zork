@@ -193,6 +193,18 @@ def handshake(
     # 4. Confirm sshd is enabled (survives reboot).
     enabled = pw_transport.run("systemctl is-enabled sshd")
     result.sshd_enabled = "enabled" in enabled.stdout
+
+    # 4b. Install passwordless sudo for the engine, using the password this one
+    #     time. The engine runs privileged level setup/reset commands over SSH
+    #     with no TTY, so it needs NOPASSWD sudo for the (already-admin) user.
+    if result.sudo_verified:
+        try:
+            if pw_transport.enable_passwordless_sudo(password, user=user):
+                narrator.status("Wiring up passwordless sudo for the night shift...")
+        except Exception:
+            # Non-fatal: the game can still narrate/read, but setup needs this.
+            narrator.status("(Could not install passwordless sudo; setup steps may prompt.)")
+
     pw_transport.close()
 
     # 5. Reconnect using the KEY, proving password-free access works now.
