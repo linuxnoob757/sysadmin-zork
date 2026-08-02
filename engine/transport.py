@@ -165,6 +165,28 @@ class SSHTransport:
         if not result.ok:
             raise RuntimeError(f"Failed to install public key: {result.stderr}")
 
+    def run_with_input(
+        self, command: str, stdin_text: str, *, timeout: float | None = None
+    ) -> CommandResult:
+        """Run a command, feeding `stdin_text` to its stdin, then closing it.
+
+        This is how we hand a password to `sudo -S` without ever placing it in
+        the command string (where quoting bugs or `ps`/history could leak it).
+        """
+        if self._client is None:
+            raise RuntimeError("connect() must be called before run_with_input().")
+        stdin, stdout, stderr = self._client.exec_command(command, timeout=timeout)
+        try:
+            stdin.write(stdin_text)
+            stdin.flush()
+            stdin.channel.shutdown_write()
+        except OSError:
+            pass
+        exit_code = stdout.channel.recv_exit_status()
+        out = stdout.read().decode("utf-8", errors="replace")
+        err = stderr.read().decode("utf-8", errors="replace")
+        return CommandResult(exit_code=exit_code, stdout=out, stderr=err)
+
     def enable_passwordless_sudo(self, password: str, *, user: str | None = None) -> bool:
         """Install a sudoers drop-in granting the user passwordless sudo.
 
@@ -172,20 +194,39 @@ class SSHTransport:
         break/repair services) non-interactively over SSH. The player already
         holds sudo; this only removes the interactive prompt for the account
         that's already an administrator -- the standard automated-provisioning
-        pattern on a dedicated throwaway VM. Uses `sudo -S` (password on stdin)
-        the one time we have the password, then validates with `visudo -c`.
+        pattern on a dedicated throwaway VM.
+
+        Security-sensitive by nature (it writes a sudoers file), so:
+          - the password is passed ONLY on stdin to `sudo -S`, never embedded
+            in the command string;
+          - the drop-in content is staged via SFTP to a temp file (no shell
+            interpolation of the username), then moved into place and validated
+            with `visudo -c` before it counts.
         """
+        if self._client is None:
+            raise RuntimeError("connect() must be called before enable_passwordless_sudo().")
         who = user or self.user
-        drop = f"{who} ALL=(ALL) NOPASSWD: ALL"
-        # write via tee under sudo -S; validate the specific file with visudo -c
-        pw = password.replace("'", "'\\''")
+        # A sudoers username is a restricted token; reject anything that could
+        # smuggle syntax into the file rather than trying to escape it.
+        if not who or not all(c.isalnum() or c in "._-" for c in who):
+            raise ValueError(f"unsafe sudoers user name: {who!r}")
+
+        drop = f"{who} ALL=(ALL) NOPASSWD: ALL\n"
+        staging = "/tmp/sysadmin-zork.sudoers"
+        target = "/etc/sudoers.d/sysadmin-zork"
+
+        # 1. Stage the exact file contents via SFTP -- no shell quoting at all.
+        self.put_file(staging, drop, mode=0o440)
+
+        # 2. Validate BEFORE installing, move into place, re-validate. The
+        #    password reaches sudo only through stdin (-S), never the argv.
         script = (
-            f"echo '{pw}' | sudo -S sh -c "
-            f"\"echo '{drop}' > /etc/sudoers.d/sysadmin-zork && "
-            f"chmod 440 /etc/sudoers.d/sysadmin-zork && "
-            f"visudo -cf /etc/sudoers.d/sysadmin-zork\" 2>/dev/null"
+            f"visudo -cf {staging} && "
+            f"sudo -S -p '' install -m 0440 -o root -g root {staging} {target} && "
+            f"sudo -S -p '' visudo -cf {target} && "
+            f"rm -f {staging}"
         )
-        result = self.run(script)
+        result = self.run_with_input(script, password + "\n")
         # Confirm it actually works now, without a password.
         return result.ok and self.run("sudo -n true").ok
 
@@ -453,8 +494,7 @@ class LocalTransport(Transport):
         cmd = command.strip()
         if cmd.startswith("sudo "):
             cmd = cmd[len("sudo "):].strip()
-        for prefix in ("/home/student/", "/srv/", "/etc/", "/var/"):
-            cmd = cmd.replace(prefix, (self.root / prefix.lstrip("/")).as_posix() + "/")
+        cmd = self._remap_paths(cmd)
         try:
             proc = subprocess.run(
                 ["bash", "-c", cmd],
@@ -469,9 +509,27 @@ class LocalTransport(Transport):
             return CommandResult(124, "", "timeout")
 
     def _local_path(self, remote_path: str) -> pathlib.Path:
-        if remote_path.startswith("/home/student/"):
-            return self.root / "home" / "student" / remote_path[len("/home/student/"):]
+        # Go through the same remap the shell uses, then treat the result as a
+        # path. If it already points inside root (post-remap) use it directly;
+        # otherwise fall back to root-relative for any un-mapped absolute path.
+        remapped = self._remap_paths(remote_path)
+        if remapped != remote_path:
+            return pathlib.Path(remapped)
         return self.root / remote_path.lstrip("/")
+
+    # Prefixes rewritten from "VM absolute" to "inside the temp sandbox root".
+    # /home/student maps to <root>/home/student; everything else to <root>/<rest>.
+    _REMAP_PREFIXES = ("/home/student/", "/srv/", "/etc/", "/var/")
+
+    def _remap_paths(self, text: str) -> str:
+        """Rewrite known VM absolute paths into the sandbox root.
+
+        Used for both shell commands (`run`) and file paths (`_local_path`), so
+        a command and a later put_file/get_file agree on where a path lives.
+        """
+        for prefix in self._REMAP_PREFIXES:
+            text = text.replace(prefix, (self.root / prefix.lstrip("/")).as_posix() + "/")
+        return text
 
     def append_authorized_key(self, public_key: str) -> None:  # pragma: no cover
         raise NotImplementedError("LocalTransport is test-only")
@@ -489,10 +547,4 @@ class LocalTransport(Transport):
         return target.read_text(encoding="utf-8") if target.exists() else ""
 
 
-
-    # -- helpers used by FakeHypervisor to snapshot/restore this state -------- #
-    def _snapshot_state(self) -> dict[str, str]:
-        return dict(self.files)
-
-    def _restore_state(self, state: dict[str, str]) -> None:
-        self.files = dict(state)
+# --------------------------------------------------------------------------- #

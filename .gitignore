@@ -13,3 +13,6 @@ dist/
 profiles/
 # Local spike / dev config pointing at a real VM
 spike.local.json
+
+# Hermes desktop attachments (transient)
+.hermes/

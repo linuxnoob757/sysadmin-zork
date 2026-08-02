@@ -13,6 +13,7 @@ All against the fake sandbox - no VM.
 from __future__ import annotations
 
 import pathlib
+import sys
 import tempfile
 
 from engine.checker import apply_setup, run_checks
@@ -56,9 +57,12 @@ def test_loader_tiers_ordered_and_labeled():
 def test_every_level_is_honestly_winnable():
     campaign = load_campaign()
     for lv in campaign.all_levels():
-        if lv.requires_real_vm:
-            # Symlinks can't be modeled by the local bash sandbox on Windows;
-            # these are validated against the real VM instead (Phase 3-style).
+        if lv.requires_real_vm and sys.platform.startswith("win"):
+            # `requires_real_vm` really means "needs POSIX filesystem semantics
+            # the fake can't model" (e.g. symlinks). Under real bash on
+            # Linux/macOS the LocalTransport sandbox handles these fine, so we
+            # only skip on Windows, where readlink -f yields host-specific
+            # paths. On POSIX we exercise the authored solution like any level.
             continue
         sb = _fresh_sandbox()
 

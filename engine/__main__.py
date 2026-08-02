@@ -56,11 +56,9 @@ def _cmd_spike(args: argparse.Namespace) -> int:
         )
 
     # Allow a custom baseline snapshot name to flow through.
-    spike_mod.BASELINE_SNAPSHOT = args.snapshot
-
     try:
         with sandbox:
-            report = spike_mod.run_spike(sandbox)
+            report = spike_mod.run_spike(sandbox, snapshot_name=args.snapshot)
     except Exception as exc:  # surface real connection/hypervisor errors clearly
         print(f"\nSPIKE ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
