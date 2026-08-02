@@ -10,6 +10,7 @@ like without side effects.
 
 from __future__ import annotations
 
+import pathlib
 from dataclasses import dataclass, field
 
 from engine.level import CheckSpec, Level
@@ -39,10 +40,28 @@ def _eval_one(sandbox: Sandbox, spec: CheckSpec) -> tuple[bool, str]:
     if kind == "cmd_succeeds":
         ok = sandbox.run(spec.command).ok
         return ok, spec.describe or f"`{spec.command}` succeeds"
+    if kind == "cmd_fails":
+        ok = not sandbox.run(spec.command).ok
+        return ok, spec.describe or f"`{spec.command}` no longer succeeds"
     if kind == "cmd_stdout_eq":
         res = sandbox.run(spec.command)
         ok = res.ok and res.stdout.strip() == spec.expect
         return ok, spec.describe or f"`{spec.command}` outputs '{spec.expect}'"
+    if kind == "cmd_stdout_contains":
+        res = sandbox.run(spec.command)
+        ok = res.ok and spec.expect in res.stdout
+        return ok, spec.describe or f"`{spec.command}` output contains '{spec.expect}'"
+    if kind == "symlink_resolves":
+        # spec.path is the symlink; spec.expect is the real target it must
+        # resolve to. We compare the *basename* of the resolved target rather
+        # than the full absolute path, because on Windows/MSYS readlink -f
+        # yields a host-specific temp path while on the VM it yields /srv/...
+        # -- the contract we actually care about is "current points at a real
+        # release directory (by name)", and the level pins that name.
+        res = sandbox.run(f"readlink -f {spec.path}")
+        resolved = res.stdout.strip()
+        ok = res.ok and pathlib.Path(resolved).name == pathlib.Path(spec.expect).name
+        return ok, spec.describe or f"{spec.path} resolves to {spec.expect}"
     return False, f"unknown check kind: {kind!r}"
 
 

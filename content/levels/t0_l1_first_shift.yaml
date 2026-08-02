@@ -1,0 +1,69 @@
+id: t0_l1_first_shift
+tier: 0
+order: 1
+title: "First Shift"
+
+intro: |
+  Before the real fires start, learn where the extinguisher's kept.
+
+  The pager's still screaming, but here's a secret: it can wait ninety
+  seconds while I teach you to not die. The box is clean. Nothing's
+  wrong with it yet. This is the only calm you get tonight, so use it.
+
+  Four words keep you breathing on nights like this:
+
+      look    - I re-read you the situation. For when the dark closes in.
+      hint    - Stuck? I lean in and whisper. Costs you points. Pride's
+                the cheapest thing in this building; spend it freely.
+      map     - The whole night laid out: what's done, what's still
+                locked behind you, what's waiting in the dark ahead.
+      check   - You tell me it's fixed. I go look for myself. I've been
+                lied to by better men than you - GREERSON, mostly - so
+                I don't take it on faith. I take it on the box.
+
+  Everything else you type drops straight into the box. Real shell.
+  Real Linux. Real consequences. I'm just the voice in your ear.
+
+  Your first job's a mercy. Prove you can touch the box and leave a
+  mark: drop a file called 'badge' in your home directory. Then say
+  'check'.
+
+      (Cold hands? `touch ~/badge` and it's done.)
+
+victory_text: |
+  There it is. ~/badge - your name carved into the wall, first mark
+  of a long night. Small thing. Means everything.
+
+  You reached into a real machine, changed something true about it,
+  and I checked reality instead of clapping for your say-so. That's
+  the deal between us. You do the work; the box tells me if it's real.
+
+  The pager, which never actually stopped, somehow gets louder.  (+50)
+
+  [ Tier 1 unlocked ]
+
+objectives:
+  - "Create a file named 'badge' in your home directory"
+  - "Run `check` to confirm"
+
+hints:
+  - "This one's a freebie. The `touch` command creates an empty file."
+  - "`touch` followed by the path. Your home directory is `~`."
+  - "Type exactly: `touch ~/badge` - then type `check`."
+
+setup: []
+
+checks:
+  - kind: file_exists
+    path: /home/student/badge
+    describe: "~/badge should exist"
+
+solution:
+  - "touch /home/student/badge"
+
+scoring:
+  base: 50
+  hint_penalty: 10
+  par_seconds: 300
+
+prerequisites: []

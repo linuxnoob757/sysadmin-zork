@@ -1,0 +1,69 @@
+id: t1_l3_needle_in_the_haystack
+tier: 1
+order: 3
+title: "Needle in the Haystack"
+
+intro: |
+  3:14 AM. The hour when bad decisions come home to roost.
+
+  The web app is bleeding debug output straight to real customers -
+  stack traces, internal file paths, the guts of the machine spilled
+  across the screen for anyone with a browser and bad intentions.
+
+  Somewhere under /etc/app GREERSON flipped DEBUG mode on - "just to
+  check something" - and then did what he always did: wandered off and
+  never flipped it back. It's been quietly hemorrhaging ever since.
+
+  There are hundreds of config files under /etc/app. Exactly one of
+  them carries DEBUG=on where every sane bone in this system wants it
+  to read DEBUG=off.
+
+  One line. Hundreds of files. And you are absolutely not opening them
+  one at a time - that's how the night wins. You're going to hunt.
+  Find the guilty file. Flip it to off. Touch nothing else.
+
+victory_text: |
+  One line, buried in a haystack of hundreds, and you dragged it into
+  the light. DEBUG's off. The stack traces die mid-sentence.
+
+  You didn't read every file. You asked the right question and let
+  `grep` do the reading - which is the entire difference between an
+  admin and a martyr. GREERSON left this landmine armed for weeks
+  because he never learned to hunt; he only ever wandered.
+
+  You hunt. Remember that about yourself. (+150)
+
+objectives:
+  - "Locate the config file under /etc/app containing DEBUG=on"
+  - "Change that line to DEBUG=off, leaving all other files untouched"
+
+hints:
+  - "You don't search by hand. `grep -r` searches recursively through every file in a directory. What are you searching for?"
+  - "`grep -rn 'DEBUG=on' /etc/app` finds the file and the line number. `-n` gives you the line."
+  - "Once you know the file, edit it (`vi`, or `sed -i 's/DEBUG=on/DEBUG=off/' <file>`). Verify with `grep` again, then `check`."
+
+# Plant the landmine in exactly one config; seed the rest as innocent.
+setup:
+  - "mkdir -p /etc/app"
+  - "for n in $(seq 1 200); do @echo '# config file' > /etc/app/conf_$n.conf; done"
+  - "@echo 'DEBUG=on' > /etc/app/conf_137.conf"
+
+checks:
+  - kind: cmd_fails
+    command: "grep -rq 'DEBUG=on' /etc/app"
+    describe: "no file under /etc/app should contain DEBUG=on"
+  - kind: cmd_stdout_contains
+    command: "grep -rn 'DEBUG=off' /etc/app/conf_137.conf"
+    expect: "DEBUG=off"
+    describe: "the guilty config should now read DEBUG=off"
+
+solution:
+  - "sed -i 's/DEBUG=on/DEBUG=off/' /etc/app/conf_137.conf"
+
+scoring:
+  base: 150
+  hint_penalty: 35
+  par_seconds: 900
+
+prerequisites:
+  - t1_l2_the_hidden_file

@@ -13,6 +13,12 @@ with no hypervisor present, and is the core bet of the Phase 0 spike.
 
 from __future__ import annotations
 
+import os
+import pathlib
+import socket
+import subprocess
+import time
+
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
@@ -399,8 +405,90 @@ class FakeTransport:
         self._require_connected()
         self.files[remote_path] = content
 
+    def get_file(self, remote_path: str) -> str:
+        self._require_connected()
+        return self.files.get(remote_path, "")
+
+    # -- helpers used by FakeHypervisor to snapshot/restore this state -------- #
+    def _snapshot_state(self) -> dict[str, str]:
+        return dict(self.files)
+
+    def _restore_state(self, state: dict[str, str]) -> None:
+        self.files = dict(state)
+
     def close(self) -> None:
         self.connected = False
+
+
+class LocalTransport(Transport):
+    """Run commands in a local temp directory via the real system shell.
+
+    Used for unit-testing filesystem/shell-heavy content (Tier 1 levels that
+    lean on grep/sed/ln/readlink/loops) without spinning up the VM. HOME is
+    faked to the sandbox dir so `~/...` references resolve locally. Commands
+    run through `bash -c` with a cwd rooted at `root`, so relative paths and
+    ~ behave like a real (throwaway) machine.
+    """
+
+    def __init__(self, root: pathlib.Path):
+        self.root = root
+        self._connected = False
+
+    def connect(self) -> None:
+        self._connected = True
+        # Ensure the VM's home exists locally so ~-based content works.
+        (self.root / "home" / "student").mkdir(parents=True, exist_ok=True)
+
+    def close(self) -> None:
+        self._connected = False
+
+    def run(self, command: str, *, timeout: float | None = None) -> CommandResult:
+        if not self._connected:
+            raise RuntimeError("connect() must be called before run().")
+        env = dict(os.environ)
+        env["HOME"] = (self.root / "home" / "student").as_posix()
+        # Remap the VM's absolute paths into our temp root so content authored
+        # for the real box runs in a hermetic local sandbox. We rewrite each
+        # known prefix (/home/student, /srv, /etc, /var) to <root>/<rest>.
+        cmd = command.strip()
+        if cmd.startswith("sudo "):
+            cmd = cmd[len("sudo "):].strip()
+        for prefix in ("/home/student/", "/srv/", "/etc/", "/var/"):
+            cmd = cmd.replace(prefix, (self.root / prefix.lstrip("/")).as_posix() + "/")
+        try:
+            proc = subprocess.run(
+                ["bash", "-c", cmd],
+                cwd=str(self.root),
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            return CommandResult(proc.returncode, proc.stdout, proc.stderr)
+        except subprocess.TimeoutExpired:
+            return CommandResult(124, "", "timeout")
+
+    def _local_path(self, remote_path: str) -> pathlib.Path:
+        if remote_path.startswith("/home/student/"):
+            return self.root / "home" / "student" / remote_path[len("/home/student/"):]
+        return self.root / remote_path.lstrip("/")
+
+    def append_authorized_key(self, public_key: str) -> None:  # pragma: no cover
+        raise NotImplementedError("LocalTransport is test-only")
+
+    def enable_passwordless_sudo(self, password: str, *, user: str | None = None) -> bool:
+        return True
+
+    def put_file(self, remote_path: str, content: str, *, mode: int = 0o644) -> None:
+        target = self._local_path(remote_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+    def get_file(self, remote_path: str) -> str:
+        target = self._local_path(remote_path)
+        return target.read_text(encoding="utf-8") if target.exists() else ""
+
+
 
     # -- helpers used by FakeHypervisor to snapshot/restore this state -------- #
     def _snapshot_state(self) -> dict[str, str]:

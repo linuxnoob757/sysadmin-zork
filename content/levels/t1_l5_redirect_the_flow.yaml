@@ -1,0 +1,75 @@
+id: t1_l5_redirect_the_flow
+tier: 1
+order: 5
+title: "Redirect the Flow"
+
+intro: |
+  Last fire of the night, and of course it's paperwork. The cruelest
+  kind - the kind with no flames, just volume.
+
+  The overnight batch job ran without supervision and vomited forty
+  thousand lines into /var/log/batch/run.log. Somewhere in that
+  avalanche of noise are the lines that actually matter: every one
+  stamped ERROR. The morning report needs them pulled clean - just the
+  errors, each unique one counted, sorted so the worst repeat-offender
+  sits proud at the top.
+
+  Nobody alive is going to read forty thousand lines. So you won't
+  either. You'll build a machine out of pipes and redirection that
+  reads them for you: filter the noise, tally what's left, and pour the
+  result into /var/reports/errors.txt.
+
+  Make the machine do the reading. That is, when you get down to it,
+  the entire reason we built the machine.
+
+victory_text: |
+  Forty thousand lines of midnight noise, boiled down to a report a
+  tired human can read. /var/reports/errors.txt - clean, counted,
+  sorted, worst-first.
+
+  And that's the secret they don't put on the certification: you didn't
+  do that job. You plumbed it. `grep` to filter, `sort` and `uniq` to
+  tally, a single '>' to pour it where it belongs.
+
+  Which is more than anyone ever said about GREERSON.
+
+  4:58 AM. The pager - for the first time since 11:52 - has absolutely
+  nothing to say to you. [ TIER 1 CLEARED - badge earned ] (+150)
+
+objectives:
+  - "Extract ERROR lines from /var/log/batch/run.log"
+  - "Produce a unique, count-sorted list written to /var/reports/errors.txt"
+
+hints:
+  - "Chain of tools joined by pipes `|`. Start by pulling only the error lines: `grep ERROR /var/log/batch/run.log`."
+  - "The classic tally pipeline: `grep ERROR ... | sort | uniq -c | sort -nr`. `uniq -c` counts, `sort -nr` puts the biggest first."
+  - "Full line: `grep ERROR /var/log/batch/run.log | sort | uniq -c | sort -nr > /var/reports/errors.txt`. Make sure /var/reports/ exists first (`mkdir -p`). Then `check`."
+
+setup:
+  - "mkdir -p /var/log/batch /var/reports"
+  - "@head -c 40000 /dev/urandom | @base64 > /var/log/batch/run.log"
+  - "@printf 'INFO startup ok\\n' >> /var/log/batch/run.log"
+  - "@printf 'ERROR disk full on /dev/sda1\\n%.0s' $(seq 1 12) >> /var/log/batch/run.log"
+  - "@printf 'WARN high latency\\n%.0s' $(seq 1 20) >> /var/log/batch/run.log"
+  - "@printf 'ERROR connection refused to db\\n%.0s' $(seq 1 3) >> /var/log/batch/run.log"
+
+checks:
+  - kind: file_exists
+    path: /var/reports/errors.txt
+    describe: "/var/reports/errors.txt should exist"
+  - kind: file_contains
+    path: /var/reports/errors.txt
+    expect: "ERROR disk full on /dev/sda1"
+    describe: "the report should tally the disk-full error"
+
+solution:
+  - "mkdir -p /var/reports"
+  - "grep ERROR /var/log/batch/run.log | sort | uniq -c | sort -nr > /var/reports/errors.txt"
+
+scoring:
+  base: 150
+  hint_penalty: 35
+  par_seconds: 900
+
+prerequisites:
+  - t1_l4_the_symlink_maze

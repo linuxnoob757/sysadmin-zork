@@ -123,12 +123,12 @@ def _cmd_prologue(args: argparse.Namespace) -> int:
 
 def _cmd_play(args: argparse.Namespace) -> int:
     from engine.game import Game
-    from engine.level import build_mvp_ladder
+    from engine.loader import load_campaign
     from engine.narrator import Narrator
     from engine.profile import Profile
 
     profile = Profile.load(args.profile)
-    campaign = build_mvp_ladder()
+    campaign = load_campaign()  # content/*.yaml
     narrator = Narrator()
 
     if args.fake:

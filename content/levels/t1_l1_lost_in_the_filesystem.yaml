@@ -1,0 +1,67 @@
+id: t1_l1_lost_in_the_filesystem
+tier: 1
+order: 1
+title: "Lost in the Filesystem"
+
+intro: |
+  The pager's message is four words, all caps, no punctuation, because
+  the morning crew types like the building's on fire:
+
+      CANT FIND THE VAULT
+
+  No path. No context. No breadcrumb. Classic GREERSON - he carried
+  the whole layout of this filesystem around in his head like a man
+  hoarding the only map in a maze, and when he walked out he took it
+  with him. Documentation was beneath him.
+
+  Somewhere on this box there's a directory the deploy team calls the
+  vault - /srv/company/vault. They swear it's there. Trust them exactly
+  as far as you can verify.
+
+  Get yourself to it. Stand inside it. Then leave proof you were the
+  one who found it in the dark - drop a file named 'found' in the
+  vault, so the morning crew knows a professional walked through here
+  while they slept.
+
+  First rule of not getting lost: always know where you're standing.
+
+victory_text: |
+  /srv/company/vault/found - signed, dated, and witnessed by nobody
+  but the hum of the racks.
+
+  You found your footing in a filesystem you'd never seen, with no map
+  and no help, using nothing but your own two feet and an honest `pwd`.
+  Before you throw a single punch, you know exactly where you're
+  standing.
+
+  The pager falls quiet. Enjoy the silence. It's rented, not owned. (+100)
+
+objectives:
+  - "Navigate to /srv/company/vault"
+  - "Create a file named 'found' inside it"
+
+hints:
+  - "Lost is just not knowing where you are. `pwd` prints your current directory. `ls` shows what's around you."
+  - "You can walk there in one step with an absolute path: `cd /srv/company/vault`. Absolute paths start from `/` and never lie."
+  - "`cd /srv/company/vault`, then `touch found`. Confirm with `ls` before you `check`."
+
+# The vault must exist and be writable by the player (student).
+setup:
+  - "mkdir -p /srv/company/vault"
+  - "chown student:student /srv/company/vault"
+
+checks:
+  - kind: file_exists
+    path: /srv/company/vault/found
+    describe: "/srv/company/vault/found should exist"
+
+solution:
+  - "touch /srv/company/vault/found"
+
+scoring:
+  base: 100
+  hint_penalty: 25
+  par_seconds: 600
+
+prerequisites:
+  - t0_l1_first_shift

@@ -1,0 +1,62 @@
+id: t1_l2_the_hidden_file
+tier: 1
+order: 2
+title: "The Hidden File"
+
+intro: |
+  The pager coughs up something almost human this time. A note,
+  forwarded from GREERSON's old work account, timestamped three
+  minutes before he vanished:
+
+      RECOVERY CODE IS WHERE YOU LOOK BUT DONT SEE
+
+  Even gone, the man can't resist a riddle. "Look but don't see" - on
+  a Linux box that's one thing and one thing only: a dotfile. A file
+  whose name starts with a '.', sitting in plain sight in your home
+  directory, invisible to any lazy `ls` that doesn't ask for more.
+
+  Find the hidden file in your home directory. Inside it: a recovery
+  code. Read it, then write that code - just the code, nothing else -
+  into a file called 'answer' in your home directory.
+
+  The things that matter most are usually the ones somebody hoped you
+  wouldn't look hard enough to find.
+
+victory_text: |
+  You saw what was sitting there the whole time. The code checks out,
+  copied clean into ~/answer, no smirk required.
+
+  Hidden was never gone. Half this job is just knowing to add the `-a` -
+  to make a system show you the things it tucks politely out of sight.
+  Configs. Credentials. The quiet truth of how a machine really behaves.
+
+  Somewhere, GREERSON is annoyed you cracked it this fast. (+120)
+
+objectives:
+  - "Find the hidden dotfile in ~ containing the recovery code"
+  - "Write the recovered code into ~/answer"
+
+hints:
+  - "A plain `ls` won't show it. Files starting with a dot are hidden. What flag makes `ls` show *all* files?"
+  - "`ls -a ~` reveals the dotfiles. Find the one that doesn't look like standard shell config, and `cat` it to read the code."
+  - "Read the file with `cat`, copy the code, then: `echo 'THECODE' > ~/answer` (swap in the real code). Then `check`."
+
+setup:
+  - "@echo 'ZORK-4213' > /home/student/.recovery"
+
+checks:
+  - kind: file_contains
+    path: /home/student/answer
+    expect: ZORK-4213
+    describe: "~/answer should contain the recovery code"
+
+solution:
+  - "echo 'ZORK-4213' > /home/student/answer"
+
+scoring:
+  base: 120
+  hint_penalty: 30
+  par_seconds: 600
+
+prerequisites:
+  - t1_l1_lost_in_the_filesystem

@@ -223,6 +223,42 @@ class FakeHypervisor:
 
 
 # --------------------------------------------------------------------------- #
+# Local hypervisor: snapshot/restore a temp directory (test-only)
+# --------------------------------------------------------------------------- #
+class LocalHypervisor:
+    """Snapshots a local temp dir by copying it, for LocalTransport testing.
+
+    Lets filesystem/shell-heavy content (Tier 1) be validated against a real
+    bash shell without the VM, while still exercising the snapshot/reset path
+    the game depends on.
+    """
+
+    def __init__(self, root: pathlib.Path) -> None:
+        self.root = root
+        self._snapshots: dict[str, pathlib.Path] = {}
+
+    def take_snapshot(self, name: str) -> None:
+        if name in self._snapshots:
+            shutil.rmtree(self._snapshots[name])
+        snap = self.root.parent / f".snap_{name}"
+        if snap.exists():
+            shutil.rmtree(snap)
+        shutil.copytree(self.root, snap)
+        self._snapshots[name] = snap
+
+    def restore_snapshot(self, name: str) -> None:
+        if name not in self._snapshots:
+            raise KeyError(f"No such snapshot: {name!r}")
+        snap = self._snapshots[name]
+        shutil.rmtree(self.root)
+        shutil.copytree(snap, self.root)
+
+    def list_snapshots(self) -> list[str]:
+        return list(self._snapshots)
+
+
+# --------------------------------------------------------------------------- #
+
 # Sandbox: the pairing the rest of the engine will consume
 # --------------------------------------------------------------------------- #
 class Sandbox:

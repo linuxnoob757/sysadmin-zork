@@ -54,6 +54,8 @@ class Level:
     hints: list[str] = field(default_factory=list)
     checks: list[CheckSpec] = field(default_factory=list)
     setup: list[str] = field(default_factory=list)  # commands to break the box
+    solution: list[str] = field(default_factory=list)  # test-only: solves the level
+    requires_real_vm: bool = False  # content that fakes/local-shell can't model (symlinks)
     scoring: Scoring = field(default_factory=Scoring)
     prerequisites: list[str] = field(default_factory=list)
 

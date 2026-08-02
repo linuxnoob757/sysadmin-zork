@@ -1,0 +1,72 @@
+id: t1_l4_the_symlink_maze
+tier: 1
+order: 4
+title: "The Symlink Maze"
+
+intro: |
+  The deploy pipeline's dead in the water, and the error it's choking
+  on reads like a bad joke:
+
+      No such file or directory: /srv/app/current
+
+  Except /srv/app/current is right there. You can see it in `ls`, bold
+  as a liar at a funeral. It's just... glowing wrong - the red of a
+  thing that points somewhere that isn't there anymore.
+
+  'current' was never a real directory. It's a symlink. A signpost that
+  reads "the live release is THAT way," supposed to point at whichever
+  version should actually be running. But somebody shipped a new
+  release, deleted the old one out from under the sign, and left the
+  arrow pointing proudly into an open grave. That somebody was
+  GREERSON. His idea of cleanup was deleting evidence.
+
+  The real releases live in /srv/app/releases. Find the one that
+  actually exists - the one with a body still in it - and repoint
+  'current' at it so the pipeline can find its way home.
+
+victory_text: |
+  The signpost points at solid ground again. 'current' resolves, the
+  pipeline exhales a breath it's been holding for hours, and the deploy
+  rolls forward like the grave was never there.
+
+  A symlink's a beautiful thing right up until it isn't: just a note
+  that says "look over there," pointing with total, cheerful confidence
+  - even when "over there" is a hole in the ground. You learned to check
+  where the arrows actually land before you trust them. `readlink`.
+  `ls -l`. Never follow a thing off a cliff just because it's sure of
+  itself. (+150)
+
+objectives:
+  - "Identify the valid release directory under /srv/app/releases"
+  - "Repoint the /srv/app/current symlink to that release"
+
+hints:
+  - "`ls -l /srv/app` shows where `current ->` points. A dangling symlink points at something that no longer exists. What's actually in /srv/app/releases?"
+  - "List the real releases: `ls /srv/app/releases`. One of them is the live one. Recreate the link to point there."
+  - "Force-repoint the symlink: `ln -sfn /srv/app/releases/<the-real-one> /srv/app/current`. Verify with `ls -l`, then `check`."
+
+setup:
+  - "mkdir -p /srv/app/releases/v1 /srv/app/releases/v2 /srv/app/releases/v3"
+  - "chown -R student:student /srv/app"
+  - "@echo 'live' > /srv/app/releases/v1/RELEASE"
+  - "rm -rf /srv/app/releases/v2"
+  - "@ln -sfn /srv/app/releases/v0-missing /srv/app/current"
+
+checks:
+  - kind: symlink_resolves
+    path: /srv/app/current
+    expect: /srv/app/releases/v1
+    describe: "/srv/app/current should resolve to a real release (v1)"
+
+solution:
+  - "ln -sfn /srv/app/releases/v1 /srv/app/current"
+
+scoring:
+  base: 150
+  hint_penalty: 35
+  par_seconds: 900
+
+prerequisites:
+  - t1_l3_needle_in_the_haystack
+
+requires_real_vm: true
