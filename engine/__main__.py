@@ -25,8 +25,16 @@ def _add_spike_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--key", help="Path to SSH private key.")
     p.add_argument("--port", type=int, default=22, help="SSH port (default: 22).")
     p.add_argument("--vm", help="VirtualBox VM name.")
+    p.add_argument("--vmx", help="VMware Workstation .vmx path (use with --hypervisor vmware).")
     p.add_argument("--snapshot", default="clean-baseline", help="Baseline snapshot name.")
     p.add_argument("--vboxmanage", help="Full path to VBoxManage(.exe) if not on PATH.")
+    p.add_argument("--vmrun", help="Full path to vmrun(.exe) if not on PATH (VMware).")
+    p.add_argument(
+        "--hypervisor",
+        default="virtualbox",
+        choices=["virtualbox", "vmware"],
+        help="Backend: virtualbox (default) or vmware.",
+    )
 
 
 def _cmd_spike(args: argparse.Namespace) -> int:
@@ -36,11 +44,16 @@ def _cmd_spike(args: argparse.Namespace) -> int:
         print("=== Sysadmin Zork :: Phase 0 spike (FAKE transport) ===\n")
         sandbox = spike_mod.build_fake_sandbox()
     else:
-        missing = [f for f in ("host", "key", "vm") if not getattr(args, f)]
+        if getattr(args, "hypervisor", "virtualbox") == "vmware":
+            missing = [f for f in ("host", "key", "vmx") if not getattr(args, f)]
+            label = "--vmx"
+        else:
+            missing = [f for f in ("host", "key", "vm") if not getattr(args, f)]
+            label = "--vm"
         if missing:
             print(
-                "Real run needs --host, --key and --vm "
-                f"(missing: {', '.join('--' + m for m in missing)}).\n"
+                f"Real run needs --host, --key and {label} "
+                f"(missing: {', '.join('--' + m for m in missing)})\n"
                 "Or run against fakes with:  python -m engine spike --fake",
                 file=sys.stderr,
             )
@@ -50,9 +63,12 @@ def _cmd_spike(args: argparse.Namespace) -> int:
             host=args.host,
             user=args.user,
             key=args.key,
-            vm=args.vm,
             port=args.port,
+            hypervisor=args.hypervisor,
+            vm_name=args.vm,
+            vmx=args.vmx,
             vboxmanage=args.vboxmanage,
+            vmrun=args.vmrun,
         )
 
     # Allow a custom baseline snapshot name to flow through.
@@ -148,11 +164,11 @@ def _cmd_play(args: argparse.Namespace) -> int:
             )
             return 2
         from engine.transport import SSHTransport
-        from engine.vm import Sandbox, VBoxHypervisor
+        from engine.vm import Sandbox, build_hypervisor
 
         conn = profile.connection
         transport = SSHTransport(host=conn.host, user=conn.user, key_path=conn.key_path, port=conn.port)
-        hypervisor = VBoxHypervisor(conn.vm_name, vboxmanage=conn.vboxmanage)
+        hypervisor = build_hypervisor(conn)
         sandbox = Sandbox(transport, hypervisor)
         transport.connect()
 

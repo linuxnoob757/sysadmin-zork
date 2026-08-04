@@ -119,14 +119,30 @@ def build_real_sandbox(
     host: str,
     user: str,
     key: str,
-    vm: str,
     port: int = 22,
+    hypervisor: str = "virtualbox",
+    vm: str | None = None,        # VirtualBox VM name
+    vmx: str | None = None,       # VMware .vmx path
     vboxmanage: str | None = None,
+    vmrun: str | None = None,
+    pristine_disk: str | None = None,
 ) -> Sandbox:
-    """A Sandbox wired to a real VM over SSH with VirtualBox snapshots."""
+    """A Sandbox wired to a real VM over SSH.
+
+    ``hypervisor`` selects the backend: ``"virtualbox"`` (drive via VBoxManage,
+    address by ``vm``) or ``"vmware"`` (drive via vmrun, address by ``vmx``).
+    """
     from engine.transport import SSHTransport
-    from engine.vm import VBoxHypervisor
+    from engine.vm import VBoxHypervisor, Sandbox, build_hypervisor
+    from engine.vmware import VMwareHypervisor
 
     transport = SSHTransport(host=host, user=user, key_path=key, port=port)
-    hypervisor = VBoxHypervisor(vm, vboxmanage=vboxmanage)
-    return Sandbox(transport, hypervisor)
+    if hypervisor == "vmware":
+        hyper = VMwareHypervisor(
+            vmx or "",
+            vmrun=vmrun,
+            pristine_disk=pristine_disk,
+        )
+    else:
+        hyper = VBoxHypervisor(vm or "", vboxmanage=vboxmanage)
+    return Sandbox(transport, hyper)

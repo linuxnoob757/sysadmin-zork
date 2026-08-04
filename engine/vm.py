@@ -10,7 +10,6 @@
 a hypervisor and exposes the two operations every level needs -- run commands,
 and reset to a clean snapshot.
 """
-
 from __future__ import annotations
 
 import shutil
@@ -303,3 +302,31 @@ class Sandbox:
     def reset_to(self, name: str) -> None:
         """Restore a clean snapshot -- the per-level reset the whole game hinges on."""
         self.hypervisor.restore_snapshot(name)
+
+
+
+def build_hypervisor(connection: "Connection") -> "Hypervisor":
+    """Construct the matching Hypervisor from a profile Connection.
+
+    Dispatches on `connection.hypervisor`:
+      - "virtualbox" -> VBoxHypervisor (address by vm_name, drive via vboxmanage)
+      - "vmware"     -> VMwareHypervisor (address by vm_path/.vmx, drive via vmrun)
+
+    The connection module is imported lazily here only for the type hint; this
+    avoids pulling profile.py (and its json/dataclass deps) into every import of
+    engine.vm at runtime, and sidesteps any circular-import concern.
+    """
+    from engine.profile import Connection  # noqa: F401  (type only)
+
+    hv = connection.hypervisor
+    if hv == "virtualbox":
+        return VBoxHypervisor(connection.vm_name, vboxmanage=connection.vboxmanage)
+    if hv == "vmware":
+        # Imported lazily: VMware is opt-in and vmrun may not be installed.
+        from engine.vmware import VMwareHypervisor
+        return VMwareHypervisor(
+            connection.vm_path,
+            vmrun=connection.vmrun,
+            pristine_disk=connection.pristine_disk,
+        )
+    raise ValueError(f"unknown hypervisor backend: {hv!r}")

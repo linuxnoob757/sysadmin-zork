@@ -29,7 +29,18 @@ DEFAULT_PROFILE = "default"
 
 @dataclass
 class Connection:
-    """Everything needed to reach and reset the player's VM."""
+    """Everything needed to reach and reset the player's VM.
+
+    Hypervisor selection:
+      - ``hypervisor`` is ``"virtualbox"`` (default) or ``"vmware"``.
+      - VirtualBox identifies the VM by ``vm_name`` (a registered name) and
+        drives it with ``vboxmanage``.
+      - VMware Workstation/Player identifies the VM by ``vm_path`` (the path to
+        its ``.vmx`` file) and drives it with ``vmrun``.
+
+    Exactly one of (``vm_name``, ``vm_path``) must be set for the chosen
+    backend; ``vm_path`` is the VMware path, ``vm_name`` the VirtualBox one.
+    """
 
     host: str = ""
     port: int = 22
@@ -37,10 +48,20 @@ class Connection:
     key_path: str = ""
     vm_name: str = ""
     vboxmanage: str | None = None
+    vm_path: str = ""
+    vmrun: str | None = None
+    hypervisor: str = "virtualbox"
     baseline_snapshot: str = "clean-baseline"
+    pristine_disk: str = ""  # VMware clean-reinstall reset source (.vmdk)
 
     def is_complete(self) -> bool:
-        return bool(self.host and self.key_path and self.vm_name)
+        if not (self.host and self.key_path):
+            return False
+        if self.hypervisor == "virtualbox":
+            return bool(self.vm_name)
+        if self.hypervisor == "vmware":
+            return bool(self.vm_path)
+        return False
 
 
 @dataclass
