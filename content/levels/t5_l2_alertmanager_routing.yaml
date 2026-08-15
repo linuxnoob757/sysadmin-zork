@@ -1,0 +1,56 @@
+id: t5_l2_alertmanager_routing
+tier: 5
+order: 2
+title: "Alertmanager Routing"
+requires_real_vm: true
+prerequisites: [t5_l1_prometheus_monitoring]
+
+intro: |
+  10:35. Prometheus scrapes. Alerts fire. Alertmanager catches them — and
+  routes them to the NOC's slack channel by default. The paywall's "incident
+  mgmt" is a single receiver. Your job: add a route that fires student alerts
+  to your own receiver (pager: student), and make the default receiver a
+  dead-letter so the NOC's noise drops.
+
+victory_text: |
+  Alertmanager routes student-critical alerts to the student receiver, and the
+  default goes nowhere by default. The NOC's pager stays quiet; yours rings.
+
+objectives:
+  - "Add a receiver named `student`"
+  - "Route alerts matching severity=critical to the student receiver"
+  - "Set the default receiver to dead-letter"
+
+hints:
+  - "Edit /etc/alertmanager/alertmanager.yml."
+  - "Add a route with match severity=critical and receiver: student."
+  - "Set receivers: default → slack, student → email you."
+
+setup:
+  - "mkdir -p /etc/alertmanager"
+  - "printf 'global:\\n  resolve_timeout: 5m\\nroute:\\n  receiver: noc-slack\\nreceivers:\\n  - name: noc-slack\\n    slack_configs:\\n      - channel: alerts\\n' > /etc/alertmanager/alertmanager.yml"
+  - "rm -f /tmp/.am-reload"
+
+checks:
+  - kind: file_contains
+    path: /etc/alertmanager/alertmanager.yml
+    expect: "student"
+    describe: "a student receiver must exist"
+  - kind: file_contains
+    path: /etc/alertmanager/alertmanager.yml
+    expect: "severity"
+    describe: "a route must match on severity"
+  - kind: file_exists
+    path: /tmp/.am-reload
+    describe: "the alertmanager reload marker must exist"
+
+solution:
+  - "sed -i 's/receiver: noc-slack/receiver: dead-letter/' /etc/alertmanager/alertmanager.yml"
+  - "printf '\\n  - name: student\\n    webhook_configs:\\n      - url: http://127.0.0.1:9797/hook\\n' >> /etc/alertmanager/alertmanager.yml"
+  - "sed -i '/route:/a\\  routes:\\n    - match:\\n        severity: critical\\n      receiver: student' /etc/alertmanager/alertmanager.yml"
+  - "printf 'reload: student receiver added\\n' > /tmp/.am-reload"
+
+scoring:
+  base: 500
+  hint_penalty: 30
+  par_seconds: 300

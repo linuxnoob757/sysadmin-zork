@@ -1,0 +1,61 @@
+id: t5_l8_disaster_recovery
+tier: 5
+order: 8
+title: "Disaster Recovery"
+requires_real_vm: true
+prerequisites: [t5_l7_backup_restore]
+
+intro: |
+  19:00. Backups exist. Can you boot from nothing? The NOC's DR plan is a
+  PDF they never test. Your job: a recovery runbook at /docs/DISASTER_RECOVERY.md
+  that reconstructs the service from the backup + a known-good unit file, and
+  a /tmp/.dr-tested marker proving you walked the plan end-to-end.
+
+victory_text: |
+  The runbook documents the full restore sequence, the unit file is in place,
+  and /tmp/.dr-tested confirms a dry-run passed. The NOC's PDF collects dust.
+
+objectives:
+  - "Write a DR runbook documenting the restore sequence"
+  - "Stage a known-good systemd unit for student-app"
+  - "Mark the DR test as passed"
+
+hints:
+  - "Write /docs/DISASTER_RECOVERY.md with 5 numbered steps."
+  - "Stage the unit at /etc/systemd/system/student-app.service."
+  - "echo the test result into /tmp/.dr-tested."
+
+setup:
+  - "mkdir -p /docs /etc/systemd/system /backups"
+  - "rm -f /docs/DISASTER_RECOVERY.md /tmp/.dr-tested"
+  - "printf 'vendor dr plan: untested\\n' > /tmp/.dr-state"
+
+checks:
+  - kind: file_exists
+    path: /docs/DISASTER_RECOVERY.md
+    describe: "the DR runbook must exist"
+  - kind: file_contains
+    path: /docs/DISASTER_RECOVERY.md
+    expect: "restore"
+    describe: "the runbook must document the restore step"
+  - kind: file_contains
+    path: /docs/DISASTER_RECOVERY.md
+    expect: "backup"
+    describe: "the runbook must reference the backup"
+  - kind: file_exists
+    path: /etc/systemd/system/student-app.service
+    describe: "a known-good unit file must be staged"
+  - kind: file_contains
+    path: /tmp/.dr-tested
+    expect: "passed"
+    describe: "the DR test must be marked passed"
+
+solution:
+  - "printf '# Disaster Recovery Runbook — student-app\\n\\n1. Provision host, install deps.\\n2. Restore config: cp /backups/student-app.conf.bak /etc/student-app.conf\\n3. Restore unit: cp /etc/systemd/system/student-app.service /etc/systemd/system/\\n4. systemctl daemon-reload && systemctl enable --now student-app\\n5. Verify health on :8080, write /tmp/.dr-tested passed.\\n' > /docs/DISASTER_RECOVERY.md"
+  - "printf '[Unit]\\nDescription=Student App\\n\\n[Service]\\nUser=student\\nExecStart=/usr/local/bin/run-student-app\\nRestart=always\\n\\n[Install]\\nWantedBy=multi-user.target\\n' > /etc/systemd/system/student-app.service"
+  - "printf 'passed\\n' > /tmp/.dr-tested"
+
+scoring:
+  base: 600
+  hint_penalty: 30
+  par_seconds: 480

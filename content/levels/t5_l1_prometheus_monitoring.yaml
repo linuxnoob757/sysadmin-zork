@@ -1,0 +1,60 @@
+id: t5_l1_prometheus_monitoring
+tier: 5
+order: 1
+title: "Prometheus Monitoring"
+requires_real_vm: true
+prerequisites: [t4_l10_production_readiness]
+
+intro: |
+  09:50. The box is hardened, the prod-readiness gate is green, and the NOC
+  finally stops paging about uptime. Now the real question: do you *see* it?
+  Prometheus isn't installed — /etc/prometheus/prometheus.yml is a stub with
+  an empty scrape_configs block. Your first real dashboard starts here: add a
+  job that scrapes the student-app on localhost:8080, validate the YAML, and
+  write the reload marker.
+
+  Trust, but instrument.
+
+victory_text: |
+  prometheus.yml scrapes student-app at 127.0.0.1:8080, the file validates,
+  and /tmp/.prom-reload confirms the scrape was added. The NOC's "uptime"
+  was always a guess. Yours is a query away.
+
+objectives:
+  - "Add a scrape job for student-app on 127.0.0.1:8080"
+  - "Validate the YAML is parseable"
+  - "Write a reload marker proving the config was updated"
+
+hints:
+  - "`cat /etc/prometheus/prometheus.yml` shows the empty scrape_configs."
+  - "Append a job targeting 127.0.0.1:8080."
+  - "python3 -c yaml.safe_load validates; echo a marker to /tmp/.prom-reload."
+
+setup:
+  - "mkdir -p /etc/prometheus /home/student"
+  - "printf 'global:\\n  scrape_interval: 15s\\nscrape_configs:\\n  - job_name: dummy\\n' > /etc/prometheus/prometheus.yml"
+  - "rm -f /tmp/.prom-reload"
+  - "printf 'scrape: not configured\\n' > /tmp/.prom-state"
+
+checks:
+  - kind: file_contains
+    path: /etc/prometheus/prometheus.yml
+    expect: "127.0.0.1:8080"
+    describe: "scrape_configs must target student-app on 127.0.0.1:8080"
+  - kind: file_contains
+    path: /etc/prometheus/prometheus.yml
+    expect: "student-app"
+    describe: "the scrape job must be named student-app"
+  - kind: file_exists
+    path: /tmp/.prom-reload
+    describe: "the reload marker must exist"
+
+solution:
+  - "sed -i '/scrape_configs:/,$d' /etc/prometheus/prometheus.yml"
+  - "printf 'scrape_configs:\\n  - job_name: student-app\\n    static_configs:\\n      - targets: [\"127.0.0.1:8080\"]\\n' >> /etc/prometheus/prometheus.yml"
+  - "printf 'reload: student-app scrape added to 127.0.0.1:8080\\n' > /tmp/.prom-reload"
+
+scoring:
+  base: 500
+  hint_penalty: 30
+  par_seconds: 300

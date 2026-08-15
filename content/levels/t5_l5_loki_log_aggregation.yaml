@@ -1,0 +1,60 @@
+id: t5_l5_loki_log_aggregation
+tier: 5
+order: 5
+title: "Loki Log Aggregation"
+requires_real_vm: true
+prerequisites: [t5_l4_grafana_dashboard]
+
+intro: |
+  14:50. Dashboards show metrics; logs are the body. Loki isn't configured —
+  /etc/loki/local-config.yaml has the vendor's push endpoint, not yours.
+  Reconfigure it to scrape /var/log/student-app.log locally, and query a
+  label filter so the NOC's "noisy neighbor" won't drown your stream.
+
+victory_text: |
+  Loki scrapes the local app log, the push target is 127.0.0.1:3100, and the
+  query filter isolates student-app. The NOC's vendor endpoint stays mute.
+
+objectives:
+  - "Reconfigure Loki to scrape /var/log/student-app.log"
+  - "Point the push endpoint to 127.0.0.1:3100"
+  - "Add a label filter for student-app only"
+
+hints:
+  - "Edit /etc/loki/local-config.yaml."
+  - "Set the scrape target to the local log file."
+  - "Replace the vendor push URL with 127.0.0.1:3100."
+
+setup:
+  - "mkdir -p /etc/loki /var/log"
+  - "printf 'auth_enabled: false\\nserver:\\n  http_listen_port: 3100\\npositions:\\n  filename: /tmp/loki-positions.yaml\\nscrape_configs:\\n  - job_name: system\\n    static_configs:\\n      - targets:\\n          - localhost:9090\\n    pipeline_stages:\\n      - labels:\\n          job: nginx\\n' > /etc/loki/local-config.yaml"
+  - "printf 'logs: vendor endpoint\\n' > /tmp/.loki-state"
+  - "printf 'app ok\\n' > /var/log/student-app.log"
+
+checks:
+  - kind: file_contains
+    path: /etc/loki/local-config.yaml
+    expect: "/var/log/student-app.log"
+    describe: "loki must scrape the local student-app log"
+  - kind: file_contains
+    path: /etc/loki/local-config.yaml
+    expect: "127.0.0.1:3100"
+    describe: "the push target must be local (127.0.0.1:3100)"
+  - kind: file_contains
+    path: /etc/loki/local-config.yaml
+    expect: "student-app"
+    describe: "the label filter must isolate student-app"
+  - kind: file_contains
+    path: /tmp/.loki-state
+    expect: "fixed"
+    describe: "the loki reconfig must be marked complete"
+
+solution:
+  - "sed -i 's|targets:|    - targets:\\n        - /var/log/student-app.log\\n      labels:\\n        job: student-app\\n      pipeline_stages:\\n        - labels:\\n            app: student-app|' /etc/loki/local-config.yaml"
+  - "sed -i 's|http_listen_port: 3100|http_listen_port: 3100\\n  grpc_listen_port: 9096|' /etc/loki/local-config.yaml"
+  - "printf 'logs: local scrape, student-app label, fixed\\n' > /tmp/.loki-state"
+
+scoring:
+  base: 550
+  hint_penalty: 30
+  par_seconds: 360

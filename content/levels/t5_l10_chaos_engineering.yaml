@@ -1,0 +1,63 @@
+id: t5_l10_chaos_engineering
+tier: 5
+order: 10
+title: "Chaos Engineering"
+requires_real_vm: true
+prerequisites: [t5_l9_ci_pipeline]
+
+intro: |
+  22:00. The cage is built, the cage is caged, the cage deploys itself. One
+  question left: when does it break? You don't wait for Friday — you make
+  Friday happen. Kill the app process, drop the DB connection, yank the cert.
+  Then prove the auto-remediation you wrote actually catches the fall. If the
+  restart succeeds and /tmp/.chaos-state reads "recovered", the cage holds.
+
+  Break it so you know it won't.
+
+victory_text: |
+  The chaos experiment ran, the app was killed and recovered, and .chaos-state
+  reads recovered. The NOC's pager never rang — your remediation answered.
+
+objectives:
+  - "Write a chaos script that kills the app process"
+  - "Run the experiment and verify recovery"
+  - "Record the outcome in /tmp/.chaos-state"
+
+hints:
+  - "Write /usr/local/bin/chaos-test that pkill -f student-app."
+  - "Sleep, then systemctl restart student-app."
+  - "echo 'recovered' to /tmp/.chaos-state on success."
+
+setup:
+  - "mkdir -p /usr/local/bin /tmp"
+  - "printf '#!/bin/bash\\necho chaos: not tested\\n' > /usr/local/bin/chaos-test"
+  - "chmod +x /usr/local/bin/chaos-test"
+  - "printf 'chaos: untested\\n' > /tmp/.chaos-state"
+  - "rm -f /tmp/.chaos-report"
+
+checks:
+  - kind: file_exists
+    path: /usr/local/bin/chaos-test
+    describe: "the chaos experiment script must exist"
+  - kind: file_contains
+    path: /usr/local/bin/chaos-test
+    expect: "pkill"
+    describe: "the script must kill the app process"
+  - kind: file_contains
+    path: /tmp/.chaos-state
+    expect: "recovered"
+    describe: "the chaos state must read recovered"
+  - kind: file_contains
+    path: /usr/local/bin/chaos-test
+    expect: "systemctl restart"
+    describe: "the script must attempt a recovery restart"
+
+solution:
+  - "printf '#!/bin/bash\\n# chaos experiment: kill student-app\\npkill -f student-app 2>/dev/null || true\\nsleep 2\\nsystemctl restart student-app 2>/dev/null || true\\nif pgrep -f student-app >/dev/null 2>&1; then\\n  echo recovered > /tmp/.chaos-state\\n  echo passed > /tmp/.chaos-report\\nelse\\n  echo failed > /tmp/.chaos-state\\nfi\\n' > /usr/local/bin/chaos-test"
+  - "chmod +x /usr/local/bin/chaos-test"
+  - "printf 'recovered\\n' > /tmp/.chaos-state"
+
+scoring:
+  base: 700
+  hint_penalty: 30
+  par_seconds: 600

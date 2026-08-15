@@ -1,0 +1,57 @@
+id: t5_l6_automated_remediation
+tier: 5
+order: 6
+title: "Automated Remediation"
+requires_real_vm: true
+prerequisites: [t5_l3_node_exporter]
+
+intro: |
+  16:05. Alerts fire. The NOC's "runbook" is a 47-step Word doc nobody reads at
+  3 AM. The 3 AM fix is a one-liner: detect memory pressure → restart the app
+  → clear the flag. Write /usr/local/bin/auto-remediate — a script that reads
+  /proc/meminfo, and if MemAvailable < 50MB, restarts student-app and writes
+  /tmp/.remediation-log with the timestamp.
+
+victory_text: |
+  auto-remediate restarts the app under memory pressure, the log records the
+  event with a timestamp, and /tmp/.remediation-log proves it fired. The NOC
+  calls it "Closed-Loop Remediation." You call it sleep.
+
+objectives:
+  - "Write a remediation script that monitors memory"
+  - "Restart student-app when memory is low"
+  - "Log the remediation with a timestamp"
+
+hints:
+  - "Read MemAvailable from /proc/meminfo."
+  - "If under threshold, systemctl restart student-app."
+  - "Append the timestamp to /tmp/.remediation-log."
+
+setup:
+  - "mkdir -p /usr/local/bin /var/lib/student-app /tmp"
+  - "printf '#!/bin/bash\\n# stub - no remediation\\necho stub > /tmp/.remediation-log\\n' > /usr/local/bin/auto-remediate"
+  - "chmod +x /usr/local/bin/auto-remediate"
+  - "printf 'remediation: not wired\\n' > /tmp/.remediation-log"
+
+checks:
+  - kind: file_contains
+    path: /usr/local/bin/auto-remediate
+    expect: "MemAvailable"
+    describe: "the script must read MemAvailable from /proc/meminfo"
+  - kind: file_contains
+    path: /usr/local/bin/auto-remediate
+    expect: "restart"
+    describe: "the script must restart the app under pressure"
+  - kind: file_contains
+    path: /tmp/.remediation-log
+    expect: "20"
+    describe: "the remediation log must contain a 20xx timestamp"
+
+solution:
+  - "printf '#!/bin/bash\\navail=$(grep MemAvailable /proc/meminfo | awk \"{print $2}\")\\nif [ \"$avail\" -lt 50000 ]; then\\n  systemctl restart student-app 2>/dev/null || true\\n  echo \"$(date +%Y): remediation fired, mem=${avail}kB\" >> /tmp/.remediation-log\\n  echo \"remediated\"\\nelse\\n  echo \"ok\"\\nfi\\n' > /usr/local/bin/auto-remediate"
+  - "chmod +x /usr/local/bin/auto-remediate"
+
+scoring:
+  base: 600
+  hint_penalty: 30
+  par_seconds: 420

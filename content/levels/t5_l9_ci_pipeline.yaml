@@ -1,0 +1,67 @@
+id: t5_l9_ci_pipeline
+tier: 5
+order: 9
+title: "CI Pipeline"
+requires_real_vm: true
+prerequisites: [t5_l8_disaster_recovery]
+
+intro: |
+  20:30. Prod is hardened, backed up, and recoverable — but deploying to it is
+  still "scp the file and restart via ssh." The NOC's CI is vendor-hosted and
+  bills per minute. Your job: a local pipeline at /etc/student-app/ci.yml
+  that builds, lints, runs tests, and writes /tmp/.ci-pipeline with the
+  final "deployed" result. No vendor in the loop.
+
+victory_text: |
+  /etc/student-app/ci.yml defines build/lint/test/deploy stages, and
+  /tmp/.ci-pipeline confirms the run ended in deployed. The NOC's hosted
+  runner times out on the bill.
+
+objectives:
+  - "Create a CI config with build, lint, test, deploy stages"
+  - "Lint the systemd unit and YAML configs"
+  - "Mark the pipeline outcome as deployed"
+
+hints:
+  - "Write /etc/student-app/ci.yml with a stages array."
+  - "Include systemd-analyze verify and python yaml validation."
+  - "echo the final status to /tmp/.ci-pipeline."
+
+setup:
+  - "mkdir -p /etc/student-app /tmp"
+  - "printf 'vendor ci: $0.42/min\\n' > /tmp/.ci-pipeline"
+  - "rm -f /etc/student-app/ci.yml"
+
+checks:
+  - kind: file_exists
+    path: /etc/student-app/ci.yml
+    describe: "the CI pipeline config must exist"
+  - kind: file_contains
+    path: /etc/student-app/ci.yml
+    expect: "build"
+    describe: "the pipeline must have a build stage"
+  - kind: file_contains
+    path: /etc/student-app/ci.yml
+    expect: "lint"
+    describe: "the pipeline must have a lint stage"
+  - kind: file_contains
+    path: /etc/student-app/ci.yml
+    expect: "test"
+    describe: "the pipeline must have a test stage"
+  - kind: file_contains
+    path: /etc/student-app/ci.yml
+    expect: "deploy"
+    describe: "the pipeline must have a deploy stage"
+  - kind: file_contains
+    path: /tmp/.ci-pipeline
+    expect: "deployed"
+    describe: "the pipeline outcome must read deployed"
+
+solution:
+  - "printf 'stages:\\n  - build\\n  - lint\\n  - test\\n  - deploy\\n\\nbuild:\\n  script:\\n    - python3 -m py_compile engine/*.py\\n    - yaml validate content/levels/*.yaml\\n\\nlint:\\n  script:\\n    - systemd-analyze verify /etc/systemd/system/student-app.service || true\\n    - yaml safe_load /etc/prometheus/prometheus.yml\\n\\ntest:\\n  script:\\n    - uv run pytest tests/ -q\\n\\ndeploy:\\n  script:\\n    - systemctl restart student-app\n    - echo CI: pipeline deployed\n' > /etc/student-app/ci.yml"
+  - "printf 'CI: pipeline deployed — build/lint/test/deploy passed stages green\\n' > /tmp/.ci-pipeline"
+
+scoring:
+  base: 650
+  hint_penalty: 30
+  par_seconds: 420

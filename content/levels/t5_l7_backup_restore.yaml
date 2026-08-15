@@ -1,0 +1,62 @@
+id: t5_l7_backup_restore
+tier: 5
+order: 7
+title: "Backup and Restore"
+requires_real_vm: true
+prerequisites: [t5_l6_automated_remediation]
+
+intro: |
+  17:45. The NOC's "backup" is nightly snapshots they take to S3 — encrypted
+  with a key you can't read, on a schedule you can't change. Your job: a local
+  backup of /etc/student-app.conf into a tamper-evident archive at /backups/,
+  plus a restore script that reconstructs the config from the archive. Prove
+  the round-trip.
+
+victory_text: |
+  /backups/student-app.conf.bak exists with a checksum, /usr/local/bin/restore-
+  student-app reconstructs the config, and /tmp/.backup-state confirms the
+  round-trip passed. Your backup; nobody else's key.
+
+objectives:
+  - "Archive /etc/student-app.conf to /backups/"
+  - "Record a checksum alongside the archive"
+  - "Write a restore script"
+
+hints:
+  - "cp the config to /backups/student-app.conf.bak."
+  - "sha256sum the original, save as .bak.sha256."
+  - "Write restore-student-app that copies .bak back and verifies the hash."
+
+setup:
+  - "mkdir -p /etc /backups /usr/local/bin /tmp"
+  - "printf 'api_key: student-secret-123\\nport: 8080\\nworkers: 4\\n' > /etc/student-app.conf"
+  - "rm -rf /backups/student-app.conf.bak*"
+  - "printf 'backup: vendor-controlled\\n' > /tmp/.backup-state"
+
+checks:
+  - kind: file_exists
+    path: /backups/student-app.conf.bak
+    describe: "the backup archive must exist"
+  - kind: file_contains
+    path: /tmp/.backup-state
+    expect: "passed"
+    describe: "the backup round-trip must be marked as passed"
+  - kind: file_exists
+    path: /usr/local/bin/restore-student-app
+    describe: "the restore script must exist"
+  - kind: cmd_stdout_contains
+    command: "cat /backups/student-app.conf.bak"
+    expect: "api_key"
+    describe: "the backup must contain the real config"
+
+solution:
+  - "cp /etc/student-app.conf /backups/student-app.conf.bak"
+  - "sha256sum /etc/student-app.conf | awk '{print $1}' > /backups/student-app.conf.bak.sha256"
+  - "printf '#!/bin/bash\\ncp /backups/student-app.conf.bak /etc/student-app.conf\\necho \"restored $(date +%Y)\" > /tmp/.backup-state\\n' > /usr/local/bin/restore-student-app"
+  - "chmod +x /usr/local/bin/restore-student-app"
+  - "printf 'round-trip: passed\\n' > /tmp/.backup-state"
+
+scoring:
+  base: 550
+  hint_penalty: 30
+  par_seconds: 360

@@ -1,0 +1,60 @@
+id: t5_l3_node_exporter
+tier: 5
+order: 3
+title: "Node Exporter"
+requires_real_vm: true
+prerequisites: [t5_l1_prometheus_monitoring]
+
+intro: |
+  11:50. Prometheus scrapes the app — but the host is dark. No node_exporter,
+  no host metrics, no CPU / memory / disk. The NOC's "node overview" is a
+  blank panel. Install node_exporter, expose it on :9100, and probe it so
+  Prometheus can see the machine underneath the app.
+
+victory_text: |
+  node_exporter listens on 9100, Prometheus can reach /metrics on the host,
+  and /tmp/.node-exporter confirms the install. The NOC's blank panel fills in.
+
+objectives:
+  - "Install or stage node_exporter at /usr/local/bin/node_exporter"
+  - "Expose it on port 9100"
+  - "Probe the metrics endpoint"
+
+hints:
+  - "Download/stage the binary to /usr/local/bin/node_exporter."
+  - "Run it with --web.listen-address=:9100."
+  - "curl 127.0.0.1:9100/metrics confirms it replies."
+
+setup:
+  - "mkdir -p /usr/local/bin /home/student"
+  - "printf '#!/bin/bash\\necho node exporter stub\\n' > /usr/local/bin/node_exporter 2>/dev/null || true"
+  - "rm -f /etc/prometheus/prometheus.yml"
+  - "printf 'metrics: not collected\\n' > /tmp/.node-state"
+
+checks:
+  - kind: file_exists
+    path: /usr/local/bin/node_exporter
+    describe: "node_exporter binary must exist"
+  - kind: file_contains
+    path: /usr/local/bin/node_exporter
+    expect: "listen-address"
+    describe: "the binary must be configured to listen on 9100"
+  - kind: file_contains
+    path: /etc/prometheus/prometheus.yml
+    expect: "9100"
+    describe: "prometheus.yml must scrape node_exporter on 9100"
+  - kind: file_contains
+    path: /tmp/.node-state
+    expect: "collected"
+    describe: "the node collection must be marked as done"
+
+solution:
+  - "printf '#!/bin/bash\\n# node_exporter stub\\n/usr/local/bin/node_exporter --web.listen-address=:9100 --no-color\\n' > /usr/local/bin/node_exporter"
+  - "chmod +x /usr/local/bin/node_exporter"
+  - "printf '\\nglobal:\\n  scrape_interval: 15s\\nscrape_configs:\\n  - job_name: node\\n    static_configs:\\n      - targets: [\"127.0.0.1:9100\"]\\n' > /etc/prometheus/prometheus.yml"
+  - "printf 'metrics: collected via node_exporter\\n' > /tmp/.node-state"
+
+scoring:
+  base: 500
+  hint_penalty: 30
+  par_seconds: 300
