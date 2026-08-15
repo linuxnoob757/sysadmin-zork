@@ -22,6 +22,14 @@ import pathlib
 import sys
 import tempfile
 
+# When run directly (`python engine/launcher.py`), sys.path[0] is the engine/
+# dir, not the project root — so `from engine.checker` would fail. Prepend the
+# project root (parent of this file's package) when running as a script.
+if __package__ in (None, ""):
+    _root = pathlib.Path(__file__).resolve().parent.parent
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
+
 from engine.checker import CheckReport, apply_setup, run_checks
 from engine.level import Campaign, Level, load_campaign
 from engine.transport import LocalTransport
