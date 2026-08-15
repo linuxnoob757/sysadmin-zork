@@ -3,7 +3,7 @@ tier: 4
 order: 1
 title: "Systemd Hardening"
 requires_real_vm: true
-prerequisites: [t3_l1_packet_capture]
+prerequisites: [t3_l5_reverse_proxy]
 
 intro: |
   21:05. Before prod, the service runs like a tourist with a shell. The unit

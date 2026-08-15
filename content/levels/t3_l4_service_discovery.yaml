@@ -3,7 +3,7 @@ tier: 3
 order: 4
 title: "Service Discovery"
 requires_real_vm: true
-prerequisites: [t2_l1_paywall]
+prerequisites: [t3_l3_ssh_tunnel]
 
 intro: |
   19:40. `ss -tlnp` shows the NOC's agent on 0.0.0.0:9797 — but it also shows

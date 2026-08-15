@@ -2,12 +2,13 @@
 
 The launcher presents the tier/level ladder, spins up a sandboxed shell for the
 selected level, and interprets meta-commands (`check`, `hint`, `objectives`,
-`quit`, `undo`) interleaved with ordinary shell commands run against the
+`quit`) interleaved with ordinary shell commands run against the
 LocalTransport sandbox.
 
 Player flow:
     sysadmin-zork                 → shows the tier ladder, prompts for a choice
     sysadmin-zork t0_l1           → jumps straight to a level
+    sysadmin-zork prologue [--fake] → guided OS install + SSH handshake
     zork> <shell command>         → piped to bash on the sandbox
     zork> check                   → runs win-conditions, prints PASS/FAIL
     zork> hint                    → reveals the next hint (costs points)
@@ -15,9 +16,17 @@ Player flow:
     zork> solution                → (debug) replays the author's solution
     zork> undo                    → restores the broken baseline
     zork> quit|exit               → ends the session
+
+Progress gating:
+    Levels unlock sequentially. t0_l1 is unlocked by default; each subsequent
+    level requires its `prerequisites` to be marked complete in the player's
+    progress file (~/.sysadmin-zork/progress.json). Completing a level (check
+    → PASS) records it and unlocks the next.
 """
 from __future__ import annotations
 
+import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -36,7 +45,115 @@ from engine.transport import LocalTransport
 from engine.vm import LocalHypervisor, Sandbox
 
 
-# ── meta-command parser ────────────────────────────────────────
+# ── progress model ──────────────────────────────────────────────
+# Gating: a level is *playable* only after all its prerequisites are complete.
+
+def _progress_dir() -> pathlib.Path:
+    return pathlib.Path(os.path.expanduser("~/.sysadmin-zork"))
+
+
+def load_campaign_for_progress(levels_dir: str | pathlib.Path | None = None,
+                               tiers_path: str | pathlib.Path | None = None):
+    """Load campaign without choking if content/ isn't on the cwd."""
+    if levels_dir is None:
+        levels_dir = pathlib.Path(__file__).resolve().parents[1] / "content" / "levels"
+    if tiers_path is None:
+        tiers_path = pathlib.Path(__file__).resolve().parents[1] / "content" / "tiers.yaml"
+    return load_campaign(levels_dir)
+
+
+class Progress:
+    """Player's completed-level registry — gates progression story-style.
+
+    `completed` is the set of level ids the player has solved. A level
+    unlocks when all its `prerequisites` are in `completed`. t0_l1 (the
+    very first, no-prereqs level) is always unlocked.
+    """
+
+    DEFAULT_PATH = _progress_dir() / "progress.json"
+    SEED_LEVEL = "t0_l1_first_shift"
+
+    def __init__(self, root: pathlib.Path | None = None,
+                 campaign: Campaign | None = None):
+        if root is None:
+            root = self.DEFAULT_PATH
+        root = pathlib.Path(root)
+        # allow callers to pass a directory (e.g. tmp_path) — resolve to
+        # <dir>/progress.json inside it.
+        if root.is_dir() or root.suffix == "":
+            root = root / "progress.json"
+        self.root = root
+        self.campaign = campaign or load_campaign_for_progress()
+        self._completed: set[str] = set()
+        self._unlocked: set[str] | None = None
+
+    # persistence ──────────────────────────────────────────────
+    def load(self) -> "Progress":
+        self._completed = set()
+        if self.root.exists():
+            data = json.loads(self.root.read_text())
+            self._completed = {e for e in data.get("completed", []) if isinstance(e, str)}
+        return self
+
+    def save(self) -> None:
+        self.root.parent.mkdir(parents=True, exist_ok=True)
+        self.root.write_text(json.dumps(
+            {"completed": sorted(self._completed)}, indent=2))
+
+    # state ────────────────────────────────────────────────────
+    @property
+    def completed_ids(self) -> set[str]:
+        return set(self._completed)
+
+    def complete(self, level_id: str) -> None:
+        self._completed.add(level_id)
+        self._unlocked = None  # invalidate cache
+
+    def _compute_unlocked(self) -> set[str]:
+        levels = {lv.id: lv for lv in self.campaign.levels}
+        # t0_l1 (the seed) is the only level unlocked with zero completions.
+        # Every other level unlocks only when its prerequisites are *completed*.
+        unlocked: set[str] = set()
+        if self.SEED_LEVEL in levels:
+            unlocked.add(self.SEED_LEVEL)
+        # iterate to closure: a level unlocks when all its prereqs are completed
+        changed = True
+        while changed:
+            changed = False
+            for lv_id, lv in levels.items():
+                if lv_id in unlocked:
+                    continue
+                if all(p in self._completed for p in lv.prerequisites):
+                    unlocked.add(lv_id)
+                    changed = True
+        # completed levels are always "unlocked" (replayable)
+        unlocked |= self._completed
+        return unlocked
+
+    @property
+    def unlocked_ids(self) -> set[str]:
+        if self._unlocked is None:
+            self._unlocked = self._compute_unlocked()
+        return self._unlocked  # type: ignore
+
+    def is_unlocked(self, level_id: str) -> bool:
+        return level_id in self.unlocked_ids
+
+    def can_play(self, level: Level | None) -> bool:
+        """Unlocked AND runnable on this OS (real_vm levels skip on Windows)."""
+        if level is None or not self.is_unlocked(level.id):
+            return False
+        if level.requires_real_vm and sys.platform.startswith("win"):
+            return False
+        return True
+
+
+def default_progress() -> Progress:
+    """One Progress instance for the real user dir (auto-loaded)."""
+    return Progress().load()
+
+
+# ── meta-command parser ─────────────────────────────────────────
 
 _META = {"check", "hint", "objectives", "solution", "quit", "exit", "undo",
          "score", "help"}
@@ -63,18 +180,33 @@ def parse_command(line: str) -> tuple[str, str]:
 
 # ── rendering ──────────────────────────────────────────────────
 
-def render_tier_ladder(c: Campaign) -> str:
-    lines = ["Sysadmin Zork — Tier Ladder", "=" * 24, ""]
+def render_tier_ladder(c: Campaign, progress: Progress | None = None) -> str:
+    """Flat numbered menu of all levels, gated by completion progress.
+
+    Locked levels show a ✺ and can't be selected; completed ones show ✓.
+    The player just types the number — no need to remember level ids.
+    """
+    prog = progress or default_progress()
+    lines = ["Sysadmin Zork — Mission Ladder", "=" * 24, ""]
+    n = 0
     for tier in c.tiers:
-        lines.append(f"  Tier {tier.number}: {tier.title}")
+        lines.append(f"  ─ Tier {tier.number}: {tier.title}")
         for lv in tier.levels:
+            n += 1
             tag = "VM" if lv.requires_real_vm else "sandbox"
-            prereq = f"  ← {', '.join(lv.prerequisites)}" if lv.prerequisites else ""
-            lines.append(f"    [{lv.order}] {lv.id}  ({tag}){prereq}")
+            if lv.id in prog.completed_ids:
+                mark = "✓"
+                status = "DONE"
+            elif prog.is_unlocked(lv.id):
+                mark = "·"
+                status = tag
+            else:
+                mark = "✺"
+                status = f"locked ← {', '.join(lv.prerequisites)}"
+            lines.append(f"    [{n:>2}] {mark} {lv.title}  ({status})")
         lines.append("")
-    lines.append("Pick:  <t#>  or  <level_id>")
-    lines.append("       P  Prologue   (guided OS install + SSH handshake)")
-    lines.append("       Q  Quit")
+    lines.append("Legend: ✓ = done  · = ready  ✺ = locked")
+    lines.append("Pick a number, or  P  Prologue  /  Q  Quit")
     return "\n".join(lines)
 
 
@@ -115,16 +247,18 @@ def render_check(report: CheckReport) -> str:
 class GameSession:
     """Single playable level session backed by a LocalTransport sandbox."""
 
-    def __init__(self, level: Level, sandbox: Sandbox):
+    def __init__(self, level: Level, sandbox: Sandbox, progress: Progress | None = None):
         self.level = level
         self.sandbox = sandbox
+        self.progress = progress
         self.hints_used = 0
         self.solved = False
         self._apply_setup()
 
     # lifecycle ──────────────────────────────────────────────
     @classmethod
-    def for_level(cls, level_id: str, campaign: Campaign | None = None) -> "GameSession":
+    def for_level(cls, level_id: str, campaign: Campaign | None = None,
+                  progress: Progress | None = None) -> "GameSession":
         c = campaign or load_campaign()
         lv = c.get_level(level_id)
         if lv is None:
@@ -132,7 +266,7 @@ class GameSession:
         root = pathlib.Path(tempfile.mkdtemp(prefix="zork-session-"))
         sb = Sandbox(LocalTransport(root), LocalHypervisor(root))
         sb.transport.connect()
-        return cls(lv, sb)
+        return cls(lv, sb, progress)
 
     def _apply_setup(self) -> None:
         apply_setup(self.sandbox, self.level)
@@ -194,15 +328,40 @@ class GameSession:
         self.sandbox.transport.close()
 
 
+# ── prologue ───────────────────────────────────────────────────
+
+def run_prologue(fake: bool = True) -> int:
+    """Guided OS install + SSH handshake.
+
+    Delegates to engine.__main__._cmd_prologue so the bat's `prologue`
+    subcommand and the interactive ladder share one implementation.
+    """
+    from engine.__main__ import _cmd_prologue
+    return _cmd_prologue(fake)
+
+
 # ── interactive loop ───────────────────────────────────────────
 
-def run_level(level_id: str) -> None:
-    session = GameSession.for_level(level_id)
-    campaign = session  # alias for clarity
-    lv = session.level
+def run_level(level_id: str, progress: Progress | None = None) -> bool:
+    """Run a level session. Returns True if the player won, False if
+    the level was locked / the player quit without solving."""
+    prog = progress or default_progress()
+    c = prog.campaign
+    lv = c.get_level(level_id)
+    if lv is None:
+        print(f"  no such level: {level_id}")
+        return False
+    if not prog.is_unlocked(level_id):
+        print(f"\n  ✺ {level_id} is LOCKED — complete its prerequisites: {lv.prerequisites}")
+        return False
+    if lv.requires_real_vm and sys.platform.startswith("win"):
+        print(f"\n  {level_id} requires a real VM — use launch.bat with VirtualBox.")
+        return False
+    session = GameSession.for_level(level_id, campaign=c, progress=prog)
     print(render_level_start(lv.id, lv.tier, lv.title, lv.intro,
                              lv.objectives, len(lv.hints)))
     print(f"\n> box ready. type `check` to verify, `quit` to exit.\n")
+    won = False
     try:
         while True:
             try:
@@ -222,6 +381,10 @@ def run_level(level_id: str) -> None:
                 if report.passed:
                     print("\n" + lv.victory_text.strip())
                     session.solved = True
+                    won = True
+                    if prog:
+                        prog.complete(level_id)
+                        prog.save()
                     break
             elif kind == "hint":
                 h = session.next_hint()
@@ -233,7 +396,8 @@ def run_level(level_id: str) -> None:
                 for i, s in enumerate(lv.solution, 1):
                     print(f"  [{i}] {s}")
             elif kind == "score":
-                print(f"  score: {session.score}  hints: {session.hints_used}")
+                print(f"  score: {session.score}  hints: {session.hints_used}  "
+                      f"completed: {len(prog.completed_ids) if prog else 0}")
             elif kind == "undo":
                 session.undo()
                 print("  box reset to broken state.")
@@ -247,58 +411,57 @@ def run_level(level_id: str) -> None:
                     print(out)
     finally:
         session.close()
-
-
-def run_prologue(fake: bool = True) -> int:
-    """Guided OS install + SSH handshake.
-
-    Delegates to engine.__main__._cmd_prologue so the bat's `prologue`
-    subcommand and the interactive ladder share one implementation.
-    """
-    from engine.__main__ import _cmd_prologue
-    return _cmd_prologue(fake)
+    if prog and won:
+        print(f"  [{level_id}] marked complete — next tier unlocks.")
+    return won
 
 
 def pick_and_run() -> None:
+    """Interactive tier ladder. Player picks a number → level starts.
+
+    Numbers are flat (1…N across the whole campaign), so the player never
+    types a level id — they just read the menu and enter a digit.
+    """
     c = load_campaign()
-    print(render_tier_ladder(c))
+    prog = default_progress()
     while True:
+        print("\n" + render_tier_ladder(c, prog))
         choice = input("choice> ").strip()
         if choice.lower() in ("quit", "exit", "q"):
             return
         if choice.lower() in ("p", "prologue"):
             run_prologue(fake=True)
-            return
-        # tier number
-        if choice.isdigit():
-            tier_num = int(choice)
-            tier = next((t for t in c.tiers if t.number == tier_num), None)
-            if not tier:
-                print("  no such tier")
-                continue
-            print(f"  Tier {tier_num}: {tier.title}")
-            for lv in tier.levels:
-                print(f"    [{lv.order}] {lv.id} — {lv.title}")
-            sub = input(f"  tier {tier_num} level> ").strip()
-            if sub.lower() in ("back", "b"):
-                continue
-            # accept order number or id
-            for lv in tier.levels:
-                if sub == str(lv.order) or sub == lv.id:
-                    run_level(lv.id)
-                    return
-            print("  not found")
             continue
-        # level id
+        if choice.isdigit():
+            n = int(choice)
+            flat = []
+            for tier in c.tiers:
+                flat.extend(tier.levels)
+            if 1 <= n <= len(flat):
+                lv = flat[n - 1]
+                if lv.id in prog.completed_ids:
+                    print(f"  ✓ {lv.title} — already complete.")
+                    continue
+                if prog.is_unlocked(lv.id):
+                    run_level(lv.id, prog)
+                    # after completing, re-show the ladder
+                    prog.load()
+                else:
+                    print(f"  ✺ {lv.title} is LOCKED — finish: {', '.join(lv.prerequisites)}")
+                continue
+            print("  pick a valid number")
+            continue
+        # fallback: accept a level id too
         lv = c.get_level(choice)
-        if lv:
-            run_level(lv.id)
-            return
-        print("  not found — try a level id or tier number")
+        if lv and prog.is_unlocked(lv.id):
+            run_level(lv.id, prog)
+            prog.load()
+            continue
+        print("  not found — try a number from the menu")
 
 
 def main(argv: list[str] | None = None) -> int:
-    argv = argv if argv is not None else sys.argv[1:]
+    argv = list(argv if argv is not None else sys.argv[1:])
     if argv and argv[0] in ("-h", "--help", "help"):
         print("sysadmin-zork — a noir Linux training game")
         print("usage: sysadmin-zork [level_id]")
@@ -308,9 +471,8 @@ def main(argv: list[str] | None = None) -> int:
         fake = "--fake" in argv[1:]
         return run_prologue(fake)
     if argv:
-        run_level(argv[0])
-    else:
-        pick_and_run()
+        return 1 if not run_level(argv[0]) else 0
+    pick_and_run()
     return 0
 
 

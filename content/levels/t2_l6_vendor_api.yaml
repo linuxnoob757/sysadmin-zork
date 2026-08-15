@@ -3,7 +3,7 @@ tier: 2
 order: 6
 title: "Vendor API"
 requires_real_vm: true
-prerequisites: [t2_l1_paywall]
+prerequisites: [t2_l5_custom_alert]
 
 intro: |
   15:20. The paywall's CLI (`/usr/local/bin/vendorctl`) calls out to a SaaS

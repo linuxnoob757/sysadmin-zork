@@ -3,7 +3,7 @@ tier: 1
 order: 2
 title: "Permissions"
 requires_real_vm: false
-prerequisites: [t0_l1_first_shift]
+prerequisites: [t1_l1_directory_layout]
 
 intro: |
   02:45. The NOC's "personnel module" flags a world-readable id_rsa in

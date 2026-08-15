@@ -3,7 +3,7 @@ tier: 2
 order: 3
 title: "Tarball Forensics"
 requires_real_vm: true
-prerequisites: [t2_l1_paywall]
+prerequisites: [t2_l2_vendor_agent]
 
 intro: |
   10:30. The vendor's "backup engine" is a nightly cron that ships a tarball

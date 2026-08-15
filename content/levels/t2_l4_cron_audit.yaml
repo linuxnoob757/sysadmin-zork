@@ -3,7 +3,7 @@ tier: 2
 order: 4
 title: "Cron Audit"
 requires_real_vm: true
-prerequisites: [t1_l4_find_grep_awk]
+prerequisites: [t2_l3_tar_extraction]
 
 intro: |
   11:55. The paywall's cron runs every minute as root — /etc/cron.d/vendor-

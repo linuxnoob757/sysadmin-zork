@@ -3,7 +3,7 @@ tier: 3
 order: 3
 title: "SSH Tunnel"
 requires_real_vm: true
-prerequisites: [t3_l1_packet_capture]
+prerequisites: [t3_l2_firewall]
 
 intro: |
   18:22. Management plane on 10.0.5.1:22, but the NOC routes you through a

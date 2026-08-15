@@ -3,7 +3,7 @@ tier: 1
 order: 4
 title: "Find, Grep, Awk"
 requires_real_vm: false
-prerequisites: [t0_l1_first_shift]
+prerequisites: [t1_l3_pipes_redirects]
 
 intro: |
   06:22. The NOC's "asset inventory" is a 2GB text dump in /tmp/assets — hostnames,

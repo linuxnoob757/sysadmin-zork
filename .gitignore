@@ -4,3 +4,5 @@ __pycache__/
 .pytest_cache/
 .hermes/profiles/
 profiles/
+# player progress (unlocks levels as you complete them)
+.sysadmin-zork/

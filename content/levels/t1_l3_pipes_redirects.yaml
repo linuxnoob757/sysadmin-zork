@@ -3,7 +3,7 @@ tier: 1
 order: 3
 title: "Pipes and Redirects"
 requires_real_vm: false
-prerequisites: [t0_l1_first_shift]
+prerequisites: [t1_l2_permissions]
 
 intro: |
   04:10. The audit log spits raw text — a thousand `dmesg` lines a minute,

@@ -3,7 +3,7 @@ tier: 4
 order: 5
 title: "Journald Forwarding"
 requires_real_vm: true
-prerequisites: [t4_l2_selinux]
+prerequisites: [t4_l4_auditd]
 
 intro: |
   01:30. Logs are the NOC's blood — and they're coagulated. journald keeps

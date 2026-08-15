@@ -3,7 +3,7 @@ tier: 5
 order: 6
 title: "Automated Remediation"
 requires_real_vm: true
-prerequisites: [t5_l3_node_exporter]
+prerequisites: [t5_l5_loki_log_aggregation]
 
 intro: |
   16:05. Alerts fire. The NOC's "runbook" is a 47-step Word doc nobody reads at

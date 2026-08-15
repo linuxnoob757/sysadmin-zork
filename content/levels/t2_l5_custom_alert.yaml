@@ -3,7 +3,7 @@ tier: 2
 order: 5
 title: "Custom Alert"
 requires_real_vm: true
-prerequisites: [t2_l1_paywall]
+prerequisites: [t2_l4_cron_audit]
 
 intro: |
   13:40. The vendor's dashboards are pretty glass boxes — all color, no

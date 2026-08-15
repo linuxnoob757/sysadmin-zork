@@ -3,7 +3,7 @@ tier: 1
 order: 5
 title: "Users and Groups"
 requires_real_vm: false
-prerequisites: [t0_l1_first_shift]
+prerequisites: [t1_l4_find_grep_awk]
 
 intro: |
   08:40. The NOC has a "personnel module" — three new hires, each needing a

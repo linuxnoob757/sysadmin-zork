@@ -3,7 +3,7 @@ tier: 3
 order: 5
 title: "Reverse Proxy"
 requires_real_vm: true
-prerequisites: [t3_l1_packet_capture]
+prerequisites: [t3_l4_service_discovery]
 
 intro: |
   20:55. The NOC's "load balancer" is a vendor box that terminates TLS on 443

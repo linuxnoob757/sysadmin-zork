@@ -3,7 +3,7 @@ tier: 4
 order: 10
 title: "Production Readiness"
 requires_real_vm: true
-prerequisites: [t4_l8_ssh_bastion]
+prerequisites: [t4_l9_rsyslog]
 
 intro: |
   09:50. Everything's hardened. The NOC wants a single gate: a readiness

@@ -3,7 +3,7 @@ tier: 5
 order: 3
 title: "Node Exporter"
 requires_real_vm: true
-prerequisites: [t5_l1_prometheus_monitoring]
+prerequisites: [t5_l2_alertmanager_routing]
 
 intro: |
   11:50. Prometheus scrapes the app — but the host is dark. No node_exporter,

@@ -3,7 +3,7 @@ tier: 4
 order: 2
 title: "SELinux Policy"
 requires_real_vm: true
-prerequisites: [t3_l2_firewall]
+prerequisites: [t4_l1_systemd_hardening]
 
 intro: |
   22:10. The NOC's "compliance scan" greets you with a wall of green — but

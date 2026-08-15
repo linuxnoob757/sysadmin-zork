@@ -3,7 +3,7 @@ tier: 3
 order: 2
 title: "Firewall Rules"
 requires_real_vm: true
-prerequisites: [t2_l2_vendor_agent]
+prerequisites: [t3_l1_packet_capture]
 
 intro: |
   17:35. The NOC's "defensive firewall" lets everything out — egress is open,
