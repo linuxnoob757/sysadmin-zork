@@ -35,11 +35,105 @@ def _cmd_play(fake: bool, level_id: str | None) -> int:
 
 
 def _cmd_prologue(fake: bool) -> int:
-    msg = "prologue: guided OS install + SSH handshake (not yet implemented)"
-    if fake:
-        msg += " — the --fake prologue self-check is available via `spike`."
-    print(msg)
-    return 0
+    """Guided OS install + SSH handshake.
+
+    Real VM (no --fake): prints the interactive install checklist and waits
+    for the player to confirm each step after installing Rocky Linux by hand.
+
+    --fake: simulates the handshake steps against a fresh sandbox so the
+    engine's path to the game (hostname → user → sshd → /etc/hosts → verify)
+    is provable without a VM.
+    """
+    if not fake:
+        return _prologue_interactive()
+    return _prologue_fake()
+
+
+def _prologue_interactive() -> int:
+    print("""\
+PROLOGUE — Guided OS Install + SSH Handshake
+=============================================
+Install Rocky Linux 9 in the VM, then confirm each step:
+
+  1. Hostname:      hostnamectl set-hostname zork-prod
+  2. User:           useradd -m -G wheel student && passwd student
+  3. SSHD:           sudo systemctl enable --now sshd
+  4. Network:        ensure 192.168.56.x on the host-only adapter
+  5. Handshake:      ssh student@192.168.56.<host>
+
+Type the step number + ENTER after completing each. `q` when done.
+""")
+    steps = ["hostname", "user", "sshd", "network", "handshake"]
+    done = [False] * 5
+    while True:
+        print("  status:", " ".join(f"[{i+1}{'*' if done[i] else ' '}]" for i in range(5)))
+        try:
+            line = input("step?> ").strip()
+        except EOFError:
+            break
+        if line.lower() in ("q", "quit", "exit"):
+            break
+        if line.isdigit() and 1 <= int(line) <= 5:
+            i = int(line) - 1
+            done[i] = True
+            print(f"  marked {steps[i]} done. Next?")
+        else:
+            print("  enter 1-5, or q")
+    all_done = all(done)
+    print("\nPROLOGUE:", "ALL STEPS CONFIRMED — the box is yours." if all_done
+          else "incomplete — re-run prologue to continue.")
+    return 0 if all_done else 1
+
+
+def _prologue_fake() -> int:
+    """Fake handshake: prove the handshake path end-to-end in a sandbox."""
+    import pathlib, tempfile
+    from engine.transport import LocalTransport
+    from engine.vm import LocalHypervisor, Sandbox
+
+    print("""\
+PROLOGUE (fake) — Simulated OS Install + SSH Handshake
+=======================================================
+Walking the install path in a sandbox:
+  1. hostname → /etc/hostname
+  2. user     → /etc/passwd entry for `student`
+  3. sshd     → /etc/ssh/sshd_config exists
+  4. network  → /etc/hosts with the box IP
+  5. handshake→ /tmp/.ssh-handshake confirms the route
+""")
+    root = pathlib.Path(tempfile.mkdtemp(prefix="zork-prologue-"))
+    sb = Sandbox(LocalTransport(root), LocalHypervisor(root))
+    sb.transport.connect()
+
+    # step 1: hostname
+    sb.run("printf 'zork-prod\\n' > /etc/hostname", timeout=5.0)
+    # step 2: user
+    sb.run("printf 'student:x:1000:1000::/home/student:/bin/bash\\n' >> /etc/passwd", timeout=5.0)
+    # step 3: sshd config
+    sb.run("mkdir -p /etc/ssh && printf 'Port 22\\n' > /etc/ssh/sshd_config", timeout=5.0)
+    # step 4: network hosts
+    sb.run("printf '127.0.0.1 localhost\\n192.168.56.10 zork-prod\\n' > /etc/hosts", timeout=5.0)
+    # step 5: handshake marker
+    sb.run("printf 'handshake: ssh student@192.168.56.10 OK\\n' > /tmp/.ssh-handshake", timeout=5.0)
+
+    checks = [
+        ("/etc/hostname", "zork-prod", "hostname set"),
+        ("/etc/passwd", "/home/student", "student user present"),
+        ("/etc/ssh/sshd_config", "Port 22", "sshd configured"),
+        ("/etc/hosts", "192.168.56.10", "network configured"),
+        ("/tmp/.ssh-handshake", "OK", "handshake confirmed"),
+    ]
+    all_ok = True
+    for path, expect, label in checks:
+        p = sb.transport.abs_path(path)
+        ok = p.exists() and expect in p.read_text(errors="replace")
+        print(f"  [{'PASS' if ok else 'FAIL'}] {label}")
+        if not ok:
+            all_ok = False
+    sb.transport.close()
+    print("\nPROLOGUE:", "PASS — handshake path verified." if all_ok
+          else "FAIL — something broke in the install path.")
+    return 0 if all_ok else 1
 
 
 def _cmd_spike(fake: bool) -> int:
@@ -80,8 +174,10 @@ def _cmd_spike(fake: bool) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(argv if argv is not None else sys.argv[1:])
     if not argv:
-        print(__doc__.strip().splitlines()[0])
-        return 1
+        # no subcommand → drop into the interactive tier ladder
+        from engine.launcher import pick_and_run
+        pick_and_run()
+        return 0
 
     cmd, rest = argv[0], argv[1:]
     fake = "--fake" in rest

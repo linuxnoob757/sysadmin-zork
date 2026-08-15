@@ -72,7 +72,9 @@ def render_tier_ladder(c: Campaign) -> str:
             prereq = f"  ← {', '.join(lv.prerequisites)}" if lv.prerequisites else ""
             lines.append(f"    [{lv.order}] {lv.id}  ({tag}){prereq}")
         lines.append("")
-    lines.append("Pick:  <t#>  or  <level_id>  or  quit")
+    lines.append("Pick:  <t#>  or  <level_id>")
+    lines.append("       P  Prologue   (guided OS install + SSH handshake)")
+    lines.append("       Q  Quit")
     return "\n".join(lines)
 
 
@@ -247,12 +249,25 @@ def run_level(level_id: str) -> None:
         session.close()
 
 
+def run_prologue(fake: bool = True) -> int:
+    """Guided OS install + SSH handshake.
+
+    Delegates to engine.__main__._cmd_prologue so the bat's `prologue`
+    subcommand and the interactive ladder share one implementation.
+    """
+    from engine.__main__ import _cmd_prologue
+    return _cmd_prologue(fake)
+
+
 def pick_and_run() -> None:
     c = load_campaign()
     print(render_tier_ladder(c))
     while True:
         choice = input("choice> ").strip()
         if choice.lower() in ("quit", "exit", "q"):
+            return
+        if choice.lower() in ("p", "prologue"):
+            run_prologue(fake=True)
             return
         # tier number
         if choice.isdigit():
@@ -287,7 +302,11 @@ def main(argv: list[str] | None = None) -> int:
     if argv and argv[0] in ("-h", "--help", "help"):
         print("sysadmin-zork — a noir Linux training game")
         print("usage: sysadmin-zork [level_id]")
+        print("       sysadmin-zork prologue [--fake]")
         return 0
+    if argv and argv[0] == "prologue":
+        fake = "--fake" in argv[1:]
+        return run_prologue(fake)
     if argv:
         run_level(argv[0])
     else:
