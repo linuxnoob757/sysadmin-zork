@@ -1,0 +1,56 @@
+id: t4_l4_auditd
+tier: 4
+order: 4
+title: "Auditd Rules"
+requires_real_vm: true
+prerequisites: [t4_l1_systemd_hardening]
+
+intro: |
+  00:15. The NOC's "compliance agent" reads /tmp/.audit-pass — a single file
+  that says `PASS` after their agent ran. Your job: audit the audit config.
+  /etc/audit/rules.d/student-app.rules must watch /etc/student-app.conf for
+  write, /var/log/audit/audit.log must exist, and /tmp/.audit-pass must be
+  regenerated with the real rule count — not the vendor's "PASS" lie.
+
+victory_text: |
+  The audit rules watch the config, the log dir exists, and .audit-pass
+  reflects the real rule count — not the vendor's canned PASS.
+
+objectives:
+  - "Add an audit watch on /etc/student-app.conf"
+  - "Ensure /var/log/audit exists"
+  - "Regenerate /tmp/.audit-pass with real rule count"
+
+hints:
+  - "Append `-w /etc/student-app.conf -p wa -k student_app` to the rules file."
+  - "mkdir -p /var/log/audit."
+  - "wc -l < rules | write to .audit-pass."
+
+setup:
+  - "mkdir -p /etc/audit/rules.d /var/log/audit"
+  - "printf '# Placeholder rules\\n-w /etc/passwd -p wa -k identity\\n' > /etc/audit/rules.d/student-app.rules"
+  - "printf 'PASS\\n' > /tmp/.audit-pass"
+  - "rm -f /var/log/audit/audit.log"
+
+checks:
+  - kind: file_contains
+    path: /etc/audit/rules.d/student-app.rules
+    expect: "student_app"
+    describe: "the audit rules must watch /etc/student-app.conf under key student_app"
+  - kind: file_exists
+    path: /var/log/audit/audit.log
+    describe: "audit.log must exist in /var/log/audit"
+  - kind: file_contains
+    path: /tmp/.audit-pass
+    expect: "2"
+    describe: "audit-pass must report the real rule count (2), not PASS"
+
+solution:
+  - "printf '-w /etc/student-app.conf -p wa -k student_app\\n' >> /etc/audit/rules.d/student-app.rules"
+  - "touch /var/log/audit/audit.log"
+  - "wc -l < /etc/audit/rules.d/student-app.rules | tr -d ' ' > /tmp/.audit-pass"
+
+scoring:
+  base: 400
+  hint_penalty: 30
+  par_seconds: 300

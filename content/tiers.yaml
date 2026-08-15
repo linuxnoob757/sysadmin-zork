@@ -1,5 +1,3 @@
-# Tier ladder metadata. Levels live in content/levels/*.yaml and are grouped
-# by their `tier:` field. Order within a tier comes from each level's `order:`.
 tiers:
   - number: 0
     title: "Onboarding"
@@ -9,3 +7,5 @@ tiers:
     title: "The Paywall"
   - number: 3
     title: "The Wire"
+  - number: 4
+    title: "The Vault"

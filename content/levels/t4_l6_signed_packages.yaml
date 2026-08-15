@@ -1,0 +1,62 @@
+id: t4_l6_signed_packages
+tier: 4
+order: 6
+title: "Signed Packages"
+requires_real_vm: true
+prerequisites: [t4_l4_auditd]
+
+intro: |
+  02:45. The NOC's package repo serves RPMs and DEBs with no signature
+  verification — repos.conf has gpgcheck=0 on every mirror. The playbook
+  says "trust but verify." Your job: flip gpgcheck=1 on all repos, import
+  the student keyring, and regenerate /tmp/.rpm-verified with the real check
+  count instead of the vendor's "0 unverified."
+
+  Sign the chain.
+
+victory_text: |
+  Every repo enforces gpgcheck, the keyring is imported, and .rpm-verified
+  shows zero unsigned packages. The NOC's supply-chain scanner turns green
+  — for your repos, not theirs.
+
+objectives:
+  - "Enable gpgcheck on all repo configs"
+  - "Import the student GPG key"
+  - "Verify all installed packages are signed"
+  - "Record the verification result"
+
+hints:
+  - "sed -i 's/gpgcheck=0/gpgcheck=1/' /etc/yum.repos.d/* /etc/apt/sources.list."
+  - "rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-student."
+  - "rpm -q -- gpgcheck on each installed package."
+
+setup:
+  - "mkdir -p /etc/yum.repos.d /etc/apt /etc/pki/rpm-gpg"
+  - "printf '[student-app]\\nname=Student App\\nbaseurl=http://repo.local/student\\ngpgcheck=0\\nenabled=1\\n' > /etc/yum.repos.d/student-app.repo"
+  - "printf 'deb [trusted=yes] http://repo.local/student stable main\\n' > /etc/apt/sources.list"
+  - "printf 'student-key-placeholder\\n' > /etc/pki/rpm-gpg/RPM-GPG-KEY-student"
+  - "printf '0 unverified\\n' > /tmp/.rpm-verified"
+
+checks:
+  - kind: file_contains
+    path: /etc/yum.repos.d/student-app.repo
+    expect: "gpgcheck=1"
+    describe: "the student-app repo must enforce gpgcheck=1"
+  - kind: file_contains
+    path: /etc/apt/sources.list
+    expect: "trusted=no"
+    describe: "the apt source must be untrusted (trusted=no, not trusted=yes)"
+  - kind: file_contains
+    path: /tmp/.rpm-verified
+    expect: "0 unverified"
+    describe: "no packages may remain unsigned"
+
+solution:
+  - "sed -i 's/gpgcheck=0/gpgcheck=1/' /etc/yum.repos.d/student-app.repo"
+  - "sed -i 's/\\[trusted=yes\\]/[trusted=no]/' /etc/apt/sources.list"
+  - "printf '0 unverified, 0 unsigned, gpgcheck enforced\\n' > /tmp/.rpm-verified"
+
+scoring:
+  base: 450
+  hint_penalty: 30
+  par_seconds: 420

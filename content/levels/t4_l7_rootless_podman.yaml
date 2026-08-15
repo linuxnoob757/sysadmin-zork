@@ -1,0 +1,62 @@
+id: t4_l7_rootless_podman
+tier: 4
+order: 7
+title: "Rootless Podman"
+requires_real_vm: true
+prerequisites: [t4_l1_systemd_hardening]
+
+intro: |
+  04:20. The NOC's "container runtime" is dockerd running as root — a single
+  CVE and the host is theirs. /usr/local/bin/run-student-app launches it
+  root. Switch to rootless Podman: podman run -d --userns=keep-id, the app
+  runs as student, exposed on 127.0.0.1:8080 only. No root socket, no
+  privileged container.
+
+victory_text: |
+  The app runs under student via rootless Podman, no root daemon, localhost
+  only. The NOC's root daemon dies on reboot; yours was never born.
+
+objectives:
+  - "Install/replace the runner with a rootless Podman command"
+  - "Run as the student user (no root)"
+  - "Bind to 127.0.0.1:8080 only"
+
+hints:
+  - "Write /usr/local/bin/run-student-app as a `podman run -d --userns=keep-id` line."
+  - "Use `-e USER=student` and `--userns=keep-id`."
+  - "Bind -p 127.0.0.1:8080:8080."
+
+setup:
+  - "mkdir -p /usr/local/bin /home/student /opt/student-app"
+  - "printf '#!/bin/bash\\ndocker run -d --name student-app -p 0.0.0.0:8080:8080 student/app\\n' > /usr/local/bin/run-student-app"
+  - "chmod +x /usr/local/bin/run-student-app"
+  - "rm -f /home/student/.container-env"
+  - "printf 'runtime: docker root\\n' > /tmp/.container-runtime"
+
+checks:
+  - kind: file_contains
+    path: /usr/local/bin/run-student-app
+    expect: "podman"
+    describe: "the runner must use podman, not docker"
+  - kind: file_contains
+    path: /usr/local/bin/run-student-app
+    expect: "127.0.0.1:8080"
+    describe: "the bind must be localhost-only, not 0.0.0.0"
+  - kind: file_contains
+    path: /usr/local/bin/run-student-app
+    expect: "--userns=keep-id"
+    describe: "the container must run rootless with keep-id"
+  - kind: file_contains
+    path: /tmp/.container-runtime
+    expect: "podman rootless"
+    describe: "the runtime must be recorded as podman rootless"
+
+solution:
+  - "printf '#!/bin/bash\\npodman run -d --name student-app --userns=keep-id -p 127.0.0.1:8080:8080 -e USER=student student/app:latest\\n' > /usr/local/bin/run-student-app"
+  - "chmod +x /usr/local/bin/run-student-app"
+  - "printf 'runtime: podman rootless\\n' > /tmp/.container-runtime"
+
+scoring:
+  base: 500
+  hint_penalty: 30
+  par_seconds: 360

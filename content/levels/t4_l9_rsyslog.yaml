@@ -1,0 +1,61 @@
+id: t4_l9_rsyslog
+tier: 4
+order: 9
+title: "Rsyslog Hardening"
+requires_real_vm: true
+prerequisites: [t4_l5_journald]
+
+intro: |
+  08:10. The NOC's rsyslog is a gossip — it forwards everything to their host
+  and keeps nothing locally. /etc/rsyslog.conf has an `*.* @@noc.vendor.example`
+  line as the first rule and no local file target. Stop the leak: comment the
+  NOC forward, and ensure local logs land in /var/log/student-app.log.
+
+victory_text: |
+  The NOC forward is commented, local logging is on, and /var/log/student-app.log
+  holds the app's output. The NOC's pipe runs dry.
+
+objectives:
+  - "Comment out the NOC syslog forward"
+  - "Add a local file target for the app"
+  - "Ensure /var/log/student-app.log receives logs"
+
+hints:
+  - "sed -i 's/^/ /#/' the @@ forward line."
+  - "Append `*.* /var/log/student-app.log`."
+  - "mkdir -p /var/log && touch the file."
+
+setup:
+  - "mkdir -p /etc /var/log"
+  - "printf '*.info /var/log/messages\\n*.* @@noc.vendor.example:514\\n*.* @@backup.noc.vendor.example:514\\n' > /etc/rsyslog.conf"
+  - "rm -f /var/log/student-app.log"
+  - "printf 'leak: noc forwards\\n' > /tmp/.rsyslog-state"
+
+checks:
+  - kind: file_contains
+    path: /etc/rsyslog.conf
+    expect: "#*.* @@noc.vendor.example"
+    describe: "the NOC forward must be commented out"
+  - kind: file_contains
+    path: /etc/rsyslog.conf
+    expect: "/var/log/student-app.log"
+    describe: "a local file target for the app must exist"
+  - kind: file_exists
+    path: /var/log/student-app.log
+    describe: "the local log file must exist"
+  - kind: file_contains
+    path: /tmp/.rsyslog-state
+    expect: "fixed"
+    describe: "the syslog state must be marked fixed"
+
+solution:
+  - "sed -i 's/^\\*\\.\\* @@noc.vendor.example/#*.* @@noc.vendor.example/' /etc/rsyslog.conf"
+  - "sed -i 's/^\\*\\.\\* @@backup.noc.vendor.example/#*.* @@backup.noc.vendor.example/' /etc/rsyslog.conf"
+  - "printf '*.* /var/log/student-app.log\\n' >> /etc/rsyslog.conf"
+  - "mkdir -p /var/log && touch /var/log/student-app.log"
+  - "printf 'syslog: local-only, fixed\\n' > /tmp/.rsyslog-state"
+
+scoring:
+  base: 450
+  hint_penalty: 30
+  par_seconds: 300

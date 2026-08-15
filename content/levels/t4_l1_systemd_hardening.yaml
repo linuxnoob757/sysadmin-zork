@@ -1,0 +1,67 @@
+id: t4_l1_systemd_hardening
+tier: 4
+order: 1
+title: "Systemd Hardening"
+requires_real_vm: true
+prerequisites: [t3_l1_packet_capture]
+
+intro: |
+  21:05. Before prod, the service runs like a tourist with a shell. The unit
+  at /etc/systemd/system/student-app.service has every key blank: no User=,
+  no ProtectSystem=, nothing. The NOC signs off on "running." You sign off on
+  hardened.
+
+  Lock it down: run as `student`, drop caps, make / read-only, hide /home.
+
+victory_text: |
+  The unit runs unprivileged, filesystem is mostly read-only, /home is hidden.
+  The NOC calls it "least privilege." You call it the difference between a box
+  and a coffin nail.
+
+objectives:
+  - "Set the service to run as the student user"
+  - "Add ProtectSystem=strict and ProtectHome=yes"
+  - "Drop capabilities with CapabilityBoundingSet="
+  - "Add NoNewPrivileges=yes"
+
+hints:
+  - "Edit /etc/systemd/system/student-app.service [Service]."
+  - "Append the hardening directives under [Service]."
+  - "systemctl daemon-reload after editing."
+
+setup:
+  - "mkdir -p /etc/systemd/system /home/student /opt/student-app"
+  - "printf 'sudo echo ok > /opt/student-app/canary\\n' > /usr/local/bin/student-app.sh 2>/dev/null || printf 'echo ok\\n' > /usr/local/bin/student-app.sh; chmod +x /usr/local/bin/student-app.sh"
+  - "printf '[Unit]\\nDescription=Student App\\n\\n[Service]\\nExecStart=/usr/local/bin/student-app.sh\\nUser=root\\n\\n[Install]\\nWantedBy=multi-user.target\\n' > /etc/systemd/system/student-app.service"
+  - "rm -f /etc/systemd/system/multi-user.target.wants/student-app.service"
+
+checks:
+  - kind: file_contains
+    path: /etc/systemd/system/student-app.service
+    expect: "User=student"
+    describe: "the service must run as the student user"
+  - kind: file_contains
+    path: /etc/systemd/system/student-app.service
+    expect: "ProtectSystem=strict"
+    describe: "the service must lock the filesystem read-only"
+  - kind: file_contains
+    path: /etc/systemd/system/student-app.service
+    expect: "ProtectHome=yes"
+    describe: "the service must hide /home"
+  - kind: file_contains
+    path: /etc/systemd/system/student-app.service
+    expect: "NoNewPrivileges=yes"
+    describe: "the service must drop new privileges"
+  - kind: file_contains
+    path: /etc/systemd/system/student-app.service
+    expect: "CapabilityBoundingSet="
+    describe: "capabilities must be dropped"
+
+solution:
+  - "sed -i 's/User=root/User=student/' /etc/systemd/system/student-app.service"
+  - "printf '\\nProtectSystem=strict\\nProtectHome=yes\\nNoNewPrivileges=yes\\nCapabilityBoundingSet=\\n' >> /etc/systemd/system/student-app.service"
+
+scoring:
+  base: 350
+  hint_penalty: 30
+  par_seconds: 300

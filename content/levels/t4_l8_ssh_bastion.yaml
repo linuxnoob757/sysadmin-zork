@@ -1,0 +1,62 @@
+id: t4_l8_ssh_bastion
+tier: 4
+order: 8
+title: "SSH Bastion"
+requires_real_vm: true
+prerequisites: [t3_l3_ssh_tunnel]
+
+intro: |
+  06:40. The NOC's bastion SSH daemon permits password auth and forwards
+  everything — /etc/ssh/sshd_config has PermitRootLogin yes, PasswordAuth
+  yes, and AllowTcpForwarding yes. The playbook says "harden sshd." Lock it:
+  root login off, password auth off, forwarding off, keys-only on 22.
+
+victory_text: |
+  sshd rejects root and password logins, forwarding is disabled, keys are the
+  only way in. The NOC's bastion stays up; yours doesn't let them in.
+
+objectives:
+  - "Disable PermitRootLogin"
+  - "Disable PasswordAuthentication"
+  - "Disable AllowTcpForwarding"
+  - "Ensure PubkeyAuthentication is on"
+
+hints:
+  - "sed -i on /etc/ssh/sshd_config for each directive."
+  - "set -o is the pattern: no, no, no, yes."
+  - "sshd -t validates the config before reload."
+
+setup:
+  - "mkdir -p /etc/ssh"
+  - "printf 'PermitRootLogin yes\\nPasswordAuthentication yes\\nAllowTcpForwarding yes\\nPubkeyAuthentication no\\nPort 22\\n' > /etc/ssh/sshd_config"
+  - "printf 'ssh: permissive\\n' > /tmp/.sshd-state"
+
+checks:
+  - kind: file_contains
+    path: /etc/ssh/sshd_config
+    expect: "PermitRootLogin no"
+    describe: "root login must be disabled"
+  - kind: file_contains
+    path: /etc/ssh/sshd_config
+    expect: "PasswordAuthentication no"
+    describe: "password auth must be disabled"
+  - kind: file_contains
+    path: /etc/ssh/sshd_config
+    expect: "AllowTcpForwarding no"
+    describe: "tcp forwarding must be disabled"
+  - kind: file_contains
+    path: /etc/ssh/sshd_config
+    expect: "PubkeyAuthentication yes"
+    describe: "pubkey auth must be enabled"
+
+solution:
+  - "sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config"
+  - "sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config"
+  - "sed -i 's/AllowTcpForwarding yes/AllowTcpForwarding no/' /etc/ssh/sshd_config"
+  - "sed -i 's/PubkeyAuthentication no/PubkeyAuthentication yes/' /etc/ssh/sshd_config"
+  - "printf 'ssh: hardened\\n' > /tmp/.sshd-state"
+
+scoring:
+  base: 450
+  hint_penalty: 30
+  par_seconds: 300

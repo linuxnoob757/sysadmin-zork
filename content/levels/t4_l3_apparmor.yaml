@@ -1,0 +1,62 @@
+id: t4_l3_apparmor
+tier: 4
+order: 3
+title: "AppArmor Profile"
+requires_real_vm: true
+prerequisites: [t3_l2_firewall]
+
+intro: |
+  23:20. SELinux was your hammer; AppArmor is your scalpel. The app at
+  /usr/local/bin/student-app.sh reads /etc/student-app.conf but the NOC lets
+  it write anywhere. Lock the write scope: read-only on /etc, the only write
+  dir is /var/lib/student-app, and /home is untouchable.
+
+victory_text: |
+  The profile enforces, /home is denied, /etc is read-only, /var/lib/student-app
+  is writable. The NOC's file-integrity monitor goes quiet.
+
+objectives:
+  - "Create an AppArmor profile for the app"
+  - "Deny /home/** writes"
+  - "Allow /etc/student-app.conf read, /var/lib/student-app write"
+
+hints:
+  - "Write /etc/apparmor.d/usr.local.bin-student-app.sh."
+  - "Use deny /home/** to block home writes."
+  - "aa-enforce the profile."
+
+setup:
+  - "mkdir -p /etc/apparmor.d /etc /usr/local/bin /var/lib/student-app /home/student"
+  - "printf '#!/bin/bash\\necho ok\\n' > /usr/local/bin/student-app.sh"
+  - "chmod +x /usr/local/bin/student-app.sh"
+  - "printf 'api_key: deadbeef\\n' > /etc/student-app.conf"
+  - "printf '#include <tunables/global>\\n/usr/local/bin/student-app.sh {\\n  #include <abstractions/base>\\n  /etc/student-app.conf r,\\n  /home/** rw,\\n}\\n' > /etc/apparmor.d/usr.local.bin-student-app.sh"
+  - "printf 'unconfined\\n' > /tmp/.apparmor-state"
+
+checks:
+  - kind: file_contains
+    path: /etc/apparmor.d/usr.local.bin-student-app.sh
+    expect: "deny /home"
+    describe: "the profile must deny /home writes"
+  - kind: file_contains
+    path: /etc/apparmor.d/usr.local.bin-student-app.sh
+    expect: "/var/lib/student-app"
+    describe: "the profile must allow /var/lib/student-app"
+  - kind: file_contains
+    path: /etc/apparmor.d/usr.local.bin-student-app.sh
+    expect: "/etc/student-app.conf r"
+    describe: "the profile must allow read on the config"
+  - kind: file_contains
+    path: /tmp/.apparmor-state
+    expect: "enforce"
+    describe: "the profile must be enforced"
+
+solution:
+  - "sed -i 's|/home/\\*\\* rw,|deny /home/** wl,|' /etc/apparmor.d/usr.local.bin-student-app.sh"
+  - "sed -i 's|/etc/student-app.conf r,|/etc/student-app.conf r,\\n  owner /var/lib/student-app/** rw,|' /etc/apparmor.d/usr.local.bin-student-app.sh"
+  - "printf 'enforce\\n' > /tmp/.apparmor-state"
+
+scoring:
+  base: 450
+  hint_penalty: 30
+  par_seconds: 360
