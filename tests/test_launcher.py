@@ -128,14 +128,27 @@ def test_progress_can_play_unlocked_sandbox_level(tmp_path):
     assert p.can_play(c.get_level("t1_l3_pipes_redirects"))
 
 
-# ── number selection in ladder ─────────────────────────────────
+# ── current/next ladder rendering ──────────────────────────────
 
-def test_render_tier_ladder_shows_numbers_and_gating(tmp_path):
-    """Ladder renders flat numbers; locked levels show ✺, unlocked show ·."""
+def test_render_tier_ladder_shows_current_and_next(tmp_path):
+    """Ladder shows the ready current level as [1] and the next locked level."""
     from engine.launcher import Progress, load_campaign_for_progress, render_tier_ladder
     c = load_campaign_for_progress()
     p = Progress(root=tmp_path, campaign=c)
     out = render_tier_ladder(c, p)
-    assert "[ 1]" in out
-    assert "✺" in out  # some level is locked at start
+    # at the start: current = First Shift [1], next = Directory Layout (locked)
+    assert "[1]" in out
+    assert "· First Shift" in out
+    assert "✺" in out  # next level is locked
+    assert "Directory Layout" in out
+
+
+def test_render_tier_ladder_advances_after_complete(tmp_path):
+    """After completing t0_l1, the ladder promotes t1_l1 to current [1]."""
+    from engine.launcher import Progress, load_campaign_for_progress, render_tier_ladder
+    c = load_campaign_for_progress()
+    p = Progress(root=tmp_path, campaign=c)
+    p.complete("t0_l1_first_shift")
+    out = render_tier_ladder(c, p)
+    assert "· Directory Layout" in out  # now the current ready mission
 

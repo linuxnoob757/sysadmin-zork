@@ -180,33 +180,54 @@ def parse_command(line: str) -> tuple[str, str]:
 
 # ── rendering ──────────────────────────────────────────────────
 
-def render_tier_ladder(c: Campaign, progress: Progress | None = None) -> str:
-    """Flat numbered menu of all levels, gated by completion progress.
+def _next_ready(c: Campaign, prog: Progress) -> Level | None:
+    """The lowest-numbered unlocked-but-not-completed level."""
+    flat = []
+    for tier in c.tiers:
+        flat.extend(tier.levels)
+    for lv in flat:
+        if lv.id in prog.completed_ids:
+            continue
+        if prog.is_unlocked(lv.id):
+            return lv
+    return None
 
-    Locked levels show a ✺ and can't be selected; completed ones show ✓.
-    The player just types the number — no need to remember level ids.
+
+def render_tier_ladder(c: Campaign, progress: Progress | None = None) -> str:
+    """Show only what the player needs right now:
+
+    • the current level (ready to play, numbered [1])
+    • the next locked level (the one that comes after)
+    • how many total levels they've completed
     """
     prog = progress or default_progress()
-    lines = ["Sysadmin Zork — Mission Ladder", "=" * 24, ""]
-    n = 0
-    for tier in c.tiers:
-        lines.append(f"  ─ Tier {tier.number}: {tier.title}")
-        for lv in tier.levels:
-            n += 1
-            tag = "VM" if lv.requires_real_vm else "sandbox"
-            if lv.id in prog.completed_ids:
-                mark = "✓"
-                status = "DONE"
-            elif prog.is_unlocked(lv.id):
-                mark = "·"
-                status = tag
-            else:
-                mark = "✺"
-                status = f"locked ← {', '.join(lv.prerequisites)}"
-            lines.append(f"    [{n:>2}] {mark} {lv.title}  ({status})")
+    lines = ["Sysadmin Zork — NOC Dashboard", "=" * 24, ""]
+    lines.append(f"  Completed: {len(prog.completed_ids)}/"
+                 f"{len(c.levels)}  |  Tier {c.levels[0].tier if c.levels else 0}")
+
+    current = _next_ready(c, prog)
+    if current is None:
+        # all done
         lines.append("")
-    lines.append("Legend: ✓ = done  · = ready  ✺ = locked")
-    lines.append("Pick a number, or  P  Prologue  /  Q  Quit")
+        lines.append("  ✓ All missions complete. The NOC is yours.")
+        lines.append("")
+        lines.append("  P  Prologue   (revisit guided install)")
+        lines.append("  Q  Quit")
+        return "\n".join(lines)
+
+    # the next locked level (immediately after current in story order)
+    flat = []
+    for tier in c.tiers:
+        flat.extend(tier.levels)
+    idx = flat.index(current)
+    next_locked = flat[idx + 1] if idx + 1 < len(flat) else None
+
+    lines.append("")
+    lines.append(f"  [1] · {current.title}  (ready — type 1)")
+    if next_locked:
+        lines.append(f"      ✺ {next_locked.title}  (locked ← {', '.join(next_locked.prerequisites)})")
+    lines.append("")
+    lines.append("  P  Prologue   Q  Quit")
     return "\n".join(lines)
 
 
@@ -417,47 +438,32 @@ def run_level(level_id: str, progress: Progress | None = None) -> bool:
 
 
 def pick_and_run() -> None:
-    """Interactive tier ladder. Player picks a number → level starts.
+    """Interactive ladder: shows current ready level as [1] + next locked.
 
-    Numbers are flat (1…N across the whole campaign), so the player never
-    types a level id — they just read the menu and enter a digit.
+    The player just types 1 to play the current mission, P for the prologue,
+    or Q to quit. After completing a level, the ladder re-renders with the
+    next mission ready.
     """
     c = load_campaign()
     prog = default_progress()
     while True:
         print("\n" + render_tier_ladder(c, prog))
-        choice = input("choice> ").strip()
-        if choice.lower() in ("quit", "exit", "q"):
+        choice = input("choice> ").strip().lower()
+        if choice in ("q", "quit", "exit"):
             return
-        if choice.lower() in ("p", "prologue"):
+        if choice in ("p", "prologue"):
             run_prologue(fake=True)
             continue
-        if choice.isdigit():
-            n = int(choice)
-            flat = []
-            for tier in c.tiers:
-                flat.extend(tier.levels)
-            if 1 <= n <= len(flat):
-                lv = flat[n - 1]
-                if lv.id in prog.completed_ids:
-                    print(f"  ✓ {lv.title} — already complete.")
-                    continue
-                if prog.is_unlocked(lv.id):
-                    run_level(lv.id, prog)
-                    # after completing, re-show the ladder
-                    prog.load()
-                else:
-                    print(f"  ✺ {lv.title} is LOCKED — finish: {', '.join(lv.prerequisites)}")
+        if choice == "1":
+            current = _next_ready(c, prog)
+            if current is None:
+                print("  All missions complete.")
                 continue
-            print("  pick a valid number")
+            won = run_level(current.id, prog)
+            if won:
+                prog.load()  # refresh completed set for re-render
             continue
-        # fallback: accept a level id too
-        lv = c.get_level(choice)
-        if lv and prog.is_unlocked(lv.id):
-            run_level(lv.id, prog)
-            prog.load()
-            continue
-        print("  not found — try a number from the menu")
+        print("  1 — play the current mission  |  P — prologue  |  Q — quit")
 
 
 def main(argv: list[str] | None = None) -> int:
