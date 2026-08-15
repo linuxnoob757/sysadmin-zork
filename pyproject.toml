@@ -12,6 +12,9 @@ dev = [
     "pytest>=7.0",
 ]
 
+[project.scripts]
+sysadmin-zork = "engine.launcher:main"
+
 [tool.uv]
 package = false
 
