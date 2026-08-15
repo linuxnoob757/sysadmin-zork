@@ -5,3 +5,5 @@ tiers:
     title: "Onboarding"
   - number: 1
     title: "Navigation & Files"
+  - number: 2
+    title: "The Paywall"

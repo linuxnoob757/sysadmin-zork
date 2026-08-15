@@ -1,0 +1,58 @@
+id: t2_l6_vendor_api
+tier: 2
+order: 6
+title: "Vendor API"
+requires_real_vm: true
+prerequisites: [t2_l1_paywall]
+
+intro: |
+  15:20. The paywall's CLI (`/usr/local/bin/vendorctl`) calls out to a SaaS
+  endpoint for every status change — and it's the only way the NOC believes a
+  node is healthy. Spoof the endpoint locally. Drop an /etc/hosts entry
+  that points noc.vendor.example to 127.0.0.1, and write a local stub on port
+  9797 that returns a static "healthy" JSON so the agent stops phoning home.
+
+  You don't fight the paywall — you mirror it.
+
+victory_text: |
+  /etc/hosts points the NOC to localhost, and a stub on 9797 returns the JSON
+  the agent expects. The paywall talks to itself. The NOC never notices.
+
+objectives:
+  - "Add a localhost override for noc.vendor.example in /etc/hosts"
+  - "Install a local JSON stub that answers on 9797"
+  - "Verify the stub responds with healthy"
+
+hints:
+  - "echo '127.0.0.1 noc.vendor.example' >> /etc/hosts"
+  - "Write /usr/local/bin/noc-stub with a Python http listener."
+  - "curl 127.0.0.1:9797/health must return healthy."
+
+setup:
+  - "mkdir -p /etc /usr/local/bin /opt/vendor-stub"
+  - "printf '127.0.0.1 localhost\\n' > /etc/hosts"
+  - "rm -f /usr/local/bin/noc-stub /opt/vendor-stub/healthy.json"
+
+checks:
+  - kind: file_contains
+    path: /etc/hosts
+    expect: "noc.vendor.example"
+    describe: "hosts must point the NOC to localhost"
+  - kind: file_exists
+    path: /usr/local/bin/noc-stub
+    describe: "the local stub must exist"
+  - kind: file_exists
+    path: /opt/vendor-stub/healthy.json
+    expect: null
+    describe: "the stub response file must exist"
+
+solution:
+  - "printf '127.0.0.1 localhost\\n127.0.0.1 noc.vendor.example\\n' > /etc/hosts"
+  - "printf '#!/usr/bin/env python3\\nfrom http.server import BaseHTTPRequestHandler, HTTPServer\\nclass H(BaseHTTPRequestHandler):\\n    def do_GET(self):\\n        self.send_response(200); self.end_headers(); self.wfile.write(b{\"status\":\"healthy\"})\\nHTTPServer(\"127.0.0.1\", 9797).serve_forever()\\n' > /usr/local/bin/noc-stub"
+  - "chmod +x /usr/local/bin/noc-stub"
+  - "printf '{\"status\":\"healthy\"}' > /opt/vendor-stub/healthy.json"
+
+scoring:
+  base: 400
+  hint_penalty: 30
+  par_seconds: 300

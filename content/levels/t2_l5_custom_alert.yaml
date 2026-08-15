@@ -1,0 +1,57 @@
+id: t2_l5_custom_alert
+tier: 2
+order: 5
+title: "Custom Alert"
+requires_real_vm: true
+prerequisites: [t2_l1_paywall]
+
+intro: |
+  13:40. The vendor's dashboards are pretty glass boxes — all color, no
+  signal. The real alert lives in /etc/vendor/trigger.yaml: a 90th-percentile
+  latency threshold that fires only during their demo window. Bypass it.
+  Write your own alert to /etc/alerts/student-trigger.yaml that fires on a
+  flat-line (zero throughput = app dead).
+
+  Your alert > their demo.
+
+victory_text: |
+  /etc/alerts/student-trigger.yaml holds an honest threshold-based check,
+  and the vendor trigger is commented out. The NOC's pretty boxes still glow —
+  but yours is the one that matters.
+
+objectives:
+  - "Inspect the vendor alert trigger"
+  - "Comment out the vendor's demo-window threshold"
+  - "Write an honest flat-line alert to /etc/alerts/"
+
+hints:
+  - "`cat /etc/vendor/trigger.yaml` shows the fake thresholds."
+  - "sed -i 's/^/#/' comments the vendor lines."
+  - "Write your trigger with a throughput < 1 condition."
+
+setup:
+  - "mkdir -p /etc/vendor /etc/alerts"
+  - "printf 'name: vendor-latency-demo\\nthreshold:\\n  p90: 800ms\\n  window: \"09:00-17:00\"\\n  silence: true\\n' > /etc/vendor/trigger.yaml"
+  - "rm -f /etc/alerts/student-trigger.yaml"
+
+checks:
+  - kind: file_contains
+    path: /etc/vendor/trigger.yaml
+    expect: "#name: vendor-latency-demo"
+    describe: "the vendor trigger must be commented out"
+  - kind: file_exists
+    path: /etc/alerts/student-trigger.yaml
+    describe: "a student trigger must exist in /etc/alerts/"
+  - kind: file_contains
+    path: /etc/alerts/student-trigger.yaml
+    expect: "throughput"
+    describe: "the student alert must check throughput"
+
+solution:
+  - "sed -i 's/^/#/' /etc/vendor/trigger.yaml"
+  - "printf 'name: student-flatline\\ncondition:\\n  metric: throughput\\n  operator: lt\\n  threshold: 1\\n  action: page-student\\n' > /etc/alerts/student-trigger.yaml"
+
+scoring:
+  base: 350
+  hint_penalty: 30
+  par_seconds: 300

@@ -1,0 +1,57 @@
+id: t2_l3_tar_extraction
+tier: 2
+order: 3
+title: "Tarball Forensics"
+requires_real_vm: true
+prerequisites: [t2_l1_paywall]
+
+intro: |
+  10:30. The vendor's "backup engine" is a nightly cron that ships a tarball
+  to S3 — except the tarball is a shell game. Inside /var/backups/vendor-full-
+  backup.tar.gz, half the files are symlinks pointing at /dev/null, and the
+  app config is missing its TLS key. Extract it, audit the symlinks, and
+  restore the missing key.
+
+  tar reveals what they hid.
+
+victory_text: |
+  The tarball is extracted, the dead symlinks are catalogued, and the TLS
+  key is back where the playbook expects it. The NOC calls it "Backup Fidelity
+  Validation." You call it unpacking a lie.
+
+objectives:
+  - "Extract the vendor tarball to /tmp/backup-audit"
+  - "List dangling symlinks (pointing at /dev/null)"
+  - "Restore the missing TLS key"
+
+hints:
+  - "`mkdir -p /tmp/backup-audit && tar xzf /var/backups/vendor-full-backup.tar.gz -C /tmp/backup-audit`"
+  - "`find /tmp/backup-audit -xtype l` lists broken symlinks."
+  - "Create /tmp/backup-audit/config/tls.key with real key material."
+
+setup:
+  - "mkdir -p /var/backups /tmp/backup-audit"
+  - "printf 'app.conf\\nconfig/tls.key\\nhealth.json\\n' > /tmp/manifests.txt"
+  - "cd /tmp/backup-audit && echo 'app.conf' > file-app.conf && mkdir -p config && echo 'DEADLINK' > config/tls.key && ln -s /dev/null /tmp/backup-audit/config/deadlink"
+
+checks:
+  - kind: file_exists
+    path: /tmp/backup-audit/config/tls.key
+    describe: "the restored TLS key must exist"
+  - kind: file_contains
+    path: /tmp/backup-audit/config/tls.key
+    expect: "BEGIN"
+    describe: "the TLS key must contain real key material"
+  - kind: cmd_stdout_contains
+    command: "find /tmp/backup-audit -type f | wc -l"
+    expect: "1"
+    describe: "audit must find at least the restored files"
+
+solution:
+  - "printf '-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCfakekey\\n-----END PRIVATE KEY-----\\n' > /tmp/backup-audit/config/tls.key"
+  - "printf 'app.conf\\nconfig/tls.key\\nhealth.json\\n' > /tmp/backup-audit/config/inventory.txt"
+
+scoring:
+  base: 300
+  hint_penalty: 30
+  par_seconds: 300

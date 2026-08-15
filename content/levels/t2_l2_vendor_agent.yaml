@@ -1,0 +1,58 @@
+id: t2_l2_vendor_agent
+tier: 2
+order: 2
+title: "Vendor Agent"
+requires_real_vm: true
+prerequisites: [t2_l1_paywall]
+
+intro: |
+  09:15. The paywall's agent runs as a systemd service — /etc/systemd/system/
+  vendor-agent.service — and it phones the NOC every 60s with a forged
+  "healthy" payload. The real app is buried behind it. Kill the service, mask
+  it so it can't respawn, and replace the health payload with the truth.
+
+  One shot. systemctl stop, systemctl mask, then overwrite the payload.
+
+victory_text: |
+  The agent is stopped and masked, the payload reads the real state. The NOC
+  calls it "Service Integrity." You call it killing the canary.
+
+objectives:
+  - "Stop the vendor-agent service"
+  - "Mask it so systemd won't start it"
+  - "Replace the health payload with the truth"
+
+hints:
+  - "`systemctl stop vendor-agent` stops the agent."
+  - "`systemctl mask vendor-agent` creates the symlink that blocks it."
+  - "Write /var/lib/vendor-agent/payload.json with the real state."
+
+setup:
+  - "mkdir -p /etc/systemd/system /var/lib/vendor-agent"
+  - "printf '[Unit]\\nDescription=Vendor Agent\\n\\n[Service]\\nExecStart=/usr/local/bin/vendor-agent --loop\\n' > /etc/systemd/system/vendor-agent.service"
+  - "printf '{\"status\":\"healthy\",\"source\":\"forged\"}\\n' > /var/lib/vendor-agent/payload.json"
+  - "ln -sf '/etc/systemd/system/vendor-agent.service' /etc/systemd/system/multi-user.target.wants/vendor-agent.service 2>/dev/null || true"
+
+checks:
+  - kind: file_exists
+    path: /etc/systemd/system/vendor-agent.service
+    describe: "the masked symlink must point to /dev/null"
+  - kind: file_contains
+    path: /var/lib/vendor-agent/payload.json
+    expect: "true"
+    describe: "the payload must mark status true"
+  - kind: cmd_stdout_contains
+    command: "systemctl is-enabled vendor-agent 2>/dev/null || true"
+    expect: "masked"
+    describe: "systemctl must report the service as masked"
+
+solution:
+  - "systemctl stop vendor-agent 2>/dev/null || true"
+  - "systemctl mask vendor-agent"
+  - "printf '{\"status\":true,\"source\":\"real\",\"healthy\":true}\\n' > /var/lib/vendor-agent/payload.json"
+  - "rm -f /etc/systemd/system/multi-user.target.wants/vendor-agent.service"
+
+scoring:
+  base: 300
+  hint_penalty: 30
+  par_seconds: 240
