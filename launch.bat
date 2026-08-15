@@ -98,11 +98,11 @@ if not exist "%ISO_DIR%" mkdir "%ISO_DIR%"
 set "ISO_PATH="
 for %%F in ("%ISO_DIR%\*.iso") do set "ISO_PATH=%%F"
 if defined ISO_PATH exit /b 0
-echo   No ISO found in iso\ — downloading Rocky Linux 9 minimal.
+echo   No ISO found in iso\ - downloading Rocky Linux 10 minimal.
 where curl >nul 2>nul && (
-    curl -L --fail -o "%ISO_DIR%\Rocky-9-minimal.iso" "https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9-x86_64-minimal.iso"
+    curl -L --fail -o "%ISO_DIR%\Rocky-10-minimal.iso" "https://download.rockylinux.org/pub/rocky/10.2/isos/x86_64/Rocky-10.2-x86_64-minimal.iso"
 ) || (
-    powershell -NoProfile -Command "try { Invoke-WebRequest -Uri 'https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9-x86_64-minimal.iso' -OutFile '%ISO_DIR%\Rocky-9-minimal.iso' -UseBasicParsing } catch { exit 1 }"
+    powershell -NoProfile -Command "try { Invoke-WebRequest -Uri 'https://download.rockylinux.org/pub/rocky/10/isos/x86_64/Rocky-10-latest-x86_64-minimal.iso' -OutFile '%ISO_DIR%\Rocky-9-minimal.iso' -UseBasicParsing } catch { exit 1 }"
 )
 exit /b 0
 

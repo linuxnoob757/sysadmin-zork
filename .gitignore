@@ -6,3 +6,4 @@ __pycache__/
 profiles/
 # player progress (unlocks levels as you complete them)
 .sysadmin-zork/
+iso
