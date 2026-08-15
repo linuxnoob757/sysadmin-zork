@@ -1,0 +1,61 @@
+id: t0_l1_first_shift
+tier: 0
+order: 1
+title: "First Shift"
+requires_real_vm: false
+
+intro: |
+  00:00. Pager. 1.2 seconds of silence, then the phone rings. The paywall
+  sold you a "24/7 NOC" for $12k/year — what you got is this: a single
+  terminal, a `student` user, and a box that's already wrong.
+
+  The call queue says the app is down. Your first move: read the filesystem.
+  A marker at `/srv/student-app/.status` reports the app state. Confirm it's
+  down, flip the status, and prove the box answers. Then say `check`.
+
+victory_text: |
+  The status marker reads `live` under `/srv/student-app/.status`, and the
+  first-shift marker exists in your home directory. Pager. Done.
+
+  You learned: a sysadmin's first move is always `ls` — find the marker, read
+  the state, flip it. The paywall calls that "Status Visibility" and bills
+  $800/month. It's a one-liner.
+
+objectives:
+  - "Locate the app status marker in /srv"
+  - "Read the current status and flip it to live"
+  - "Confirm your first-shift marker in ~"
+
+hints:
+  - "`cat /srv/student-app/.status` shows the current state."
+  - "Write `live` into /srv/student-app/.status to flip the state."
+  - "`touch ~/.first-shift` records that you logged your first shift."
+
+setup:
+  - "mkdir -p /srv/student-app /home/student"
+  - "echo 'down' > /srv/student-app/.status"
+  - "rm -f /home/student/.first-shift"
+  - "echo 'first shift: not yet logged' > /tmp/.first-shift-state"
+
+checks:
+  - kind: file_contains
+    path: /srv/student-app/.status
+    expect: "live"
+    describe: "the app status marker must read live"
+  - kind: file_exists
+    path: /home/student/.first-shift
+    describe: "the student's first-shift marker must exist in home"
+  - kind: cmd_stdout_contains
+    command: "cat /tmp/.first-shift-state"
+    expect: "logged"
+    describe: "the first shift must be recorded"
+
+solution:
+  - "echo 'live' > /srv/student-app/.status"
+  - "touch /home/student/.first-shift"
+  - "echo 'first shift logged: status live' > /tmp/.first-shift-state"
+
+scoring:
+  base: 200
+  hint_penalty: 30
+  par_seconds: 300

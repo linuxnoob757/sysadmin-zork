@@ -1,0 +1,5 @@
+# Tier ladder metadata. Levels live in content/levels/*.yaml and are grouped
+# by their `tier:` field. Order within a tier comes from each level's `order:`.
+tiers:
+  - number: 0
+    title: "Onboarding"
