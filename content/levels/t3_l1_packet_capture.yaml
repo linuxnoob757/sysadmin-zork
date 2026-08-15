@@ -1,0 +1,54 @@
+id: t3_l1_packet_capture
+tier: 3
+order: 1
+title: "Packet Capture"
+requires_real_vm: true
+prerequisites: [t2_l6_vendor_api]
+
+intro: |
+  16:10. The NOC's wires are live but they never show you the packets. They
+  hand you a sanitized pcap — "evidence" that the app is healthy. Run tcpdump
+  yourself. Capture 30s of traffic on lo on port 9797 (the vendor stub you
+  ran), and prove the NOC's "healthy" packet is your own echo.
+
+  Trust nothing on the wire.
+
+victory_text: |
+  /tmp/capture.pcap holds 30 seconds of localhost traffic on 9797, and the
+  audit log flags that the NOC's "external" check was local. The NOC calls
+  it "Network Observability." You prove it's theater.
+
+objectives:
+  - "Capture loopback traffic on port 9797 for 30s"
+  - "Confirm the capture is non-empty"
+  - "Log that the NOC check was local, not external"
+
+hints:
+  - "`timeout 30 tcpdump -i lo port 9797 -w /tmp/capture.pcap` runs the capture."
+  - "In another shell, `curl 127.0.0.1:9797/health` during capture."
+  - "`ls -l /tmp/capture.pcap` confirms bytes were written."
+
+setup:
+  - "rm -f /tmp/capture.pcap /tmp/.wire-audit"
+
+checks:
+  - kind: file_exists
+    path: /tmp/capture.pcap
+    describe: "the pcap capture must exist"
+  - kind: cmd_stdout_eq
+    command: "stat -c %s /tmp/capture.pcap"
+    expect: "0"
+    describe: "the pcap must be non-empty (size > 0)"
+  - kind: file_contains
+    path: /tmp/.wire-audit
+    expect: "local"
+    describe: "the audit must flag the NOC check as local"
+
+solution:
+  - "timeout 30 tcpdump -i lo port 9797 -w /tmp/capture.pcap 2>/dev/null || true"
+  - "printf 'wire-audit: NOC port-9797 check was local loopback, not external\\n' > /tmp/.wire-audit"
+
+scoring:
+  base: 350
+  hint_penalty: 30
+  par_seconds: 60

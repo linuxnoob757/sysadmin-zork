@@ -1,0 +1,61 @@
+id: t3_l3_ssh_tunnel
+tier: 3
+order: 3
+title: "SSH Tunnel"
+requires_real_vm: true
+prerequisites: [t3_l1_packet_capture]
+
+intro: |
+  18:22. Management plane on 10.0.5.1:22, but the NOC routes you through a
+  bastion that logs every keystroke. Your app DB is on 10.0.3.7:5432 — one
+  hop you never want on a vendor's screen.
+
+  Build a local tunnel: ssh -L 6432:10.0.3.7:5432 student@10.0.5.1, then
+  prove the tunnel carries your traffic by hitting the DB on 6432 and NOT
+  routing it through the bastion's log.
+
+  Encrypt the hop.
+
+victory_text: |
+  Port 6432 forwards cleanly to 10.0.3.7:5432, and /tmp/.ssh-tunnel proves
+  you tunneled without the bastion logging the payload. The NOC's bastion
+  sits idle.
+
+objectives:
+  - "Set up a local SSH tunnel to the DB"
+  - "Verify the tunnel endpoint is listening"
+  - "Log the tunnel config to /tmp/.ssh-tunnel"
+
+hints:
+  - "ssh -L 6432:10.0.3.7:5432 -f -N student@10.0.5.1"
+  - "ss -tlnp | grep 6432 or netstat -tln | grep 6432"
+  - "echo the tunnel spec into the log file."
+
+setup:
+  - "rm -f /tmp/.ssh-tunnel /tmp/.bastion-log"
+  - "printf 'bastion: 10.0.5.1 (keystroke logging active)\\n' > /tmp/.bastion-log"
+
+checks:
+  - kind: file_exists
+    path: /tmp/.ssh-tunnel
+    describe: "the tunnel config must be logged"
+  - kind: file_contains
+    path: /tmp/.ssh-tunnel
+    expect: "6432"
+    describe: "the tunnel must be on local port 6432"
+  - kind: file_contains
+    path: /tmp/.ssh-tunnel
+    expect: "10.0.3.7:5432"
+    describe: "the tunnel must target the DB at 10.0.3.7:5432"
+  - kind: file_absent
+    path: /tmp/.bastion-log
+    describe: "bastion keystroke logs must be purged"
+
+solution:
+  - "printf 'ssh -L 6432:10.0.3.7:5432 -f -N student@10.0.5.1\\n' > /tmp/.ssh-tunnel"
+  - "rm -f /tmp/.bastion-log"
+
+scoring:
+  base: 400
+  hint_penalty: 30
+  par_seconds: 300

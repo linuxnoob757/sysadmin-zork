@@ -1,0 +1,62 @@
+id: t3_l2_firewall
+tier: 3
+order: 2
+title: "Firewall Rules"
+requires_real_vm: true
+prerequisites: [t2_l2_vendor_agent]
+
+intro: |
+  17:35. The NOC's "defensive firewall" lets everything out — egress is open,
+  ingress is theater. /etc/iptables.rules.txt shows the vendor's real stance:
+  ACCEPT 0.0.0.0/0 from anywhere to port 9797. Rewrite the rules. Lock egress
+  to a single upstream, and block the vendor's canary IP (10.66.66.1) that
+  pings the NOC from the app host.
+
+  A firewall is a whitelist. The vendor wrote a wishlist.
+
+victory_text: |
+  /etc/iptables.rules.txt now DROPs the canary IP and restricts egress to the
+  real upstream. The NOC's "compliance scan" fails on their own rules.
+
+objectives:
+  - "Block the vendor canary IP (10.66.66.1)"
+  - "Restrict egress to the approved upstream (203.0.113.10)"
+  - "Set default DROP on INPUT"
+
+hints:
+  - "`cat /etc/iptables.rules.txt` shows the open ACCEPT policy."
+  - "Replace ACCEPT with DROP, add the canary block before any ACCEPT."
+  - "iptables-restore applies -t rules.txt."
+
+setup:
+  - "mkdir -p /etc"
+  - "printf '*filter\\n:INPUT ACCEPT [0:0]\\n:FORWARD ACCEPT [0:0]\\n:OUTPUT ACCEPT [0:0]\\n-A INPUT -p tcp --dport 9797 -j ACCEPT\\n-A OUTPUT -d 0.0.0.0/0 -j ACCEPT\\nCOMMIT\\n' > /etc/iptables.rules.txt"
+  - "rm -f /etc/iptables.active"
+
+checks:
+  - kind: file_contains
+    path: /etc/iptables.rules.txt
+    expect: "DROP"
+    describe: "the default INPUT policy must be DROP"
+  - kind: file_contains
+    path: /etc/iptables.rules.txt
+    expect: "10.66.66.1"
+    describe: "the canary IP must appear in a DROP rule"
+  - kind: file_contains
+    path: /etc/iptables.rules.txt
+    expect: "203.0.113.10"
+    describe: "egress must be restricted to the approved upstream"
+  - kind: file_absent
+    path: /etc/iptables.active
+    describe: "the vendor's active (open) ruleset must be removed"
+
+solution:
+  - "sed -i 's/:INPUT ACCEPT/:INPUT DROP/' /etc/iptables.rules.txt"
+  - "sed -i '/-A INPUT -p tcp --dport 9797/i -A INPUT -s 10.66.66.1 -j DROP' /etc/iptables.rules.txt"
+  - "sed -i 's/-A OUTPUT -d 0.0.0.0\/0 -j ACCEPT/-A OUTPUT -d 203.0.113.10 -j ACCEPT/' /etc/iptables.rules.txt"
+  - "rm -f /etc/iptables.active"
+
+scoring:
+  base: 400
+  hint_penalty: 30
+  par_seconds: 300

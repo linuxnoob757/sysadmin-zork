@@ -1,0 +1,61 @@
+id: t3_l4_service_discovery
+tier: 3
+order: 4
+title: "Service Discovery"
+requires_real_vm: true
+prerequisites: [t2_l1_paywall]
+
+intro: |
+  19:40. `ss -tlnp` shows the NOC's agent on 0.0.0.0:9797 — but it also shows
+  your real app, 127.0.0.1:8080, that the NOC's dashboard claims is down.
+  The agent's port scan lies. Prove the app is listening, capture the real
+  local endpoint, and write the honest service record to
+  /etc/services/student-app.
+
+  See the wire they can't see.
+
+victory_text: |
+  /etc/services/student-app holds 8080, the agent is on 9797, and the audit
+  confirms the app is listening while the NOC reports it dead. The NOC calls
+  it "Port Visibility." You call it looking at the real numbers.
+
+objectives:
+  - "Capture the real listening ports (ss/netstat)"
+  - "Write the app's real port to /etc/services/student-app"
+  - "Confirm the agent port (9797) is also present"
+
+hints:
+  - "`ss -tlnp` or `netstat -tln` lists listeners."
+  - "Parse the output for 8080 and 9797."
+  - "Write both to /etc/services/student-app."
+
+setup:
+  - "mkdir -p /etc/services /tmp"
+  - "printf 'tcp 0 0 127.0.0.1:8080 0.0.0.0:* LISTEN 4211/python3\\ntcp 0 0 0.0.0.0:9797 0.0.0.0:* LISTEN 1806/python3\\n' > /tmp/.ss-snapshot.txt"
+  - "rm -f /etc/services/student-app"
+
+checks:
+  - kind: file_contains
+    path: /tmp/.ss-snapshot.txt
+    expect: "8080"
+    describe: "the snapshot must show the app on 8080"
+  - kind: file_contains
+    path: /tmp/.ss-snapshot.txt
+    expect: "9797"
+    describe: "the snapshot must show the agent on 9797"
+  - kind: file_exists
+    path: /etc/services/student-app
+    describe: "the honest service record must exist"
+  - kind: file_contains
+    path: /etc/services/student-app
+    expect: "8080"
+    describe: "the service record must list the app on 8080"
+
+solution:
+  - "cp /tmp/.ss-snapshot.txt /tmp/.ss-real.txt"
+  - "printf 'student-app: 127.0.0.1:8080\\nagent: 0.0.0.0:9797\\n' > /etc/services/student-app"
+
+scoring:
+  base: 350
+  hint_penalty: 30
+  par_seconds: 300

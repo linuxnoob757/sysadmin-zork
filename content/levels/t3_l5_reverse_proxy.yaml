@@ -1,0 +1,63 @@
+id: t3_l5_reverse_proxy
+tier: 3
+order: 5
+title: "Reverse Proxy"
+requires_real_vm: true
+prerequisites: [t3_l1_packet_capture]
+
+intro: |
+  20:55. The NOC's "load balancer" is a vendor box that terminates TLS on 443
+  and forwards to /app — but /app is a symlink to /dev/null. The real app
+  listens on 127.0.0.1:8080. Spin up nginx (or socat) that terminates 443 and
+  forwards honestly to 8080, drop a cert at /etc/ssl/student-app.crt, and prove
+  the proxy hits the real backend.
+
+  Terminate TLS. Forward truth.
+
+victory_text: |
+  The reverse proxy listens on 443 and forwards to 8080, the cert is in place,
+  and /app is corrected. The NOC's 443 terminates to a black hole; yours
+  terminates to the app.
+
+objectives:
+  - "Configure a reverse proxy on 443 → 8080"
+  - "Install the TLS cert at /etc/ssl/student-app.crt"
+  - "Correct the /app symlink"
+
+hints:
+  - "Write an nginx server block / socat listener for 443."
+  - "ln -s /app /var/www/student-app or point to the real backend."
+  - "The cert file must contain BEGIN CERTIFICATE."
+
+setup:
+  - "mkdir -p /etc/ssl /etc/nginx/sites-available /var/www /app"
+  - "ln -sfn /dev/null /app/backend"
+  - "printf 'BAD_CERT\\n' > /etc/ssl/student-app.crt"
+  - "rm -f /etc/nginx/sites-available/student-app"
+
+checks:
+  - kind: file_contains
+    path: /etc/ssl/student-app.crt
+    expect: "BEGIN CERTIFICATE"
+    describe: "the TLS cert must be valid (BEGIN CERTIFICATE)"
+  - kind: file_exists
+    path: /etc/nginx/sites-available/student-app
+    describe: "the reverse proxy config must exist"
+  - kind: file_contains
+    path: /etc/nginx/sites-available/student-app
+    expect: "127.0.0.1:8080"
+    describe: "the proxy must target the real backend on 8080"
+  - kind: file_exists
+    path: /app/backend
+    describe: "the /app/backend symlink must resolve to a real target"
+
+solution:
+  - "printf '-----BEGIN CERTIFICATE-----\\nMIIFakeCertForStudentApp\\n-----END CERTIFICATE-----\\n' > /etc/ssl/student-app.crt"
+  - "printf 'server {\\n  listen 443 ssl;\\n  server_name student-app;\\n  ssl_certificate /etc/ssl/student-app.crt;\\n  location / { proxy_pass http://127.0.0.1:8080; }\\n}\\n' > /etc/nginx/sites-available/student-app"
+  - "ln -sfn /var/www/student-app /app/backend"
+  - "mkdir -p /var/www/student-app && printf 'app ok\\n' > /var/www/student-app/index.html"
+
+scoring:
+  base: 450
+  hint_penalty: 30
+  par_seconds: 300
