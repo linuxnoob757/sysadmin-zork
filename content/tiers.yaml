@@ -3,3 +3,5 @@
 tiers:
   - number: 0
     title: "Onboarding"
+  - number: 1
+    title: "Navigation & Files"

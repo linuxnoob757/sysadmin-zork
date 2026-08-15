@@ -1,0 +1,73 @@
+id: t1_l5_users_groups
+tier: 1
+order: 5
+title: "Users and Groups"
+requires_real_vm: false
+prerequisites: [t0_l1_first_shift]
+
+intro: |
+  08:40. The NOC has a "personnel module" — three new hires, each needing a
+  home and a team. The playbook says useradd -m, groupadd, usermod -aG. The
+  paywall calls this "Identity Lifecycle Management." You call it the file
+  at /etc/group backed by /etc/passwd.
+
+  Your job: create a `dev` group, add two service accounts (svc_web,
+  svc_db) to it with home directories, and prove membership in /etc/group
+  and /etc/passwd.
+
+victory_text: |
+  svc_web and svc_db appear in /etc/passwd with /home/svc_web and
+  /home/svc_db as their home dirs, and /etc/group lists them both under dev.
+  They bill you for "Automated Provisioning." You did it in three lines of
+  shell.
+
+objectives:
+  - "Create the dev group in /etc/group"
+  - "Add svc_web and svc_db to /etc/passwd with dev membership"
+  - "Verify with getent group dev"
+
+hints:
+  - "Append `dev:x:1000:` to /etc/group."
+  - "Append passwd entries: `svc_web:x:1001:1000::/home/svc_web:/bin/bash`."
+  - "`getent group dev` prints the group + members."
+
+setup:
+  - "mkdir -p /etc /home"
+  - "rm -f /etc/group /etc/passwd /etc/group.pre-t1"
+  - "cp /etc/group 2>/dev/null || true"
+  - "printf 'dev:x:99999:\\n' > /etc/group"
+  - "printf 'svc_web:x:1001:1001::/home/svc_web:/bin/bash\\n' > /etc/passwd 2>/dev/null || true"
+  - "printf 'svc_db:x:2001:2001::/home/svc_db:/bin/bash\\n' >> /etc/passwd 2>/dev/null || true"
+
+checks:
+  - kind: file_exists
+    path: /home/svc_web
+    describe: "svc_web must have a home directory"
+  - kind: file_exists
+    path: /home/svc_db
+    describe: "svc_db must have a home directory"
+  - kind: file_contains
+    path: /etc/group
+    expect: "dev"
+    describe: "the dev group must exist in /etc/group"
+  - kind: file_contains
+    path: /etc/passwd
+    expect: "/home/svc_web"
+    describe: "svc_web must have a home entry in /etc/passwd"
+  - kind: file_contains
+    path: /etc/passwd
+    expect: "/home/svc_db"
+    describe: "svc_db must have a home entry in /etc/passwd"
+
+solution:
+  - "printf 'dev:x:1000:svc_web,svc_db\\n' >> /etc/group"
+  - "printf 'svc_web:x:1001:1000::/home/svc_web:/bin/bash\\n' >> /etc/passwd"
+  - "printf 'svc_db:x:1002:1000::/home/svc_db:/bin/bash\\n' >> /etc/passwd"
+  - "mkdir -p /home/svc_web /home/svc_db"
+  - "echo 'svc_web primary grp: 1000' > /home/svc_web/.profile"
+  - "echo 'svc_db primary grp: 1000' > /home/svc_db/.profile"
+
+scoring:
+  base: 250
+  hint_penalty: 30
+  par_seconds: 180

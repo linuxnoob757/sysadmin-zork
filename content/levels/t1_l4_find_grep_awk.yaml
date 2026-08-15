@@ -1,0 +1,60 @@
+id: t1_l4_find_grep_awk
+tier: 1
+order: 4
+title: "Find, Grep, Awk"
+requires_real_vm: false
+prerequisites: [t0_l1_first_shift]
+
+intro: |
+  06:22. The NOC's "asset inventory" is a 2GB text dump in /tmp/assets — hostnames,
+  IPs, roles, all comma-separated, half of it stale. The paywall calls this
+  "Discovery Automation." You call it `awk` and `find`.
+
+  Your job: pull out every line where the role column (field 3) is `web`,
+  then extract just the hostname (field 1), and write the deduplicated, sorted
+  list to /tmp/web_hosts. Then report the count.
+
+victory_text: |
+  /tmp/web_hosts holds the sorted, unique web hostnames and /tmp/web_count
+  shows how many there are. The NOC files a ticket called "Automated Host
+  Discovery." You close it with `awk -F,`.
+
+objectives:
+  - "Extract web-role hostnames from /tmp/assets into /tmp/web_hosts"
+  - "Sort and deduplicate the list"
+  - "Report the count to /tmp/web_count"
+
+hints:
+  - "`awk -F, '$3 == \"web\" {print $1}' /tmp/assets` extracts web hostnames."
+  - "Pipe to `sort -u` to dedupe, redirect to /tmp/web_hosts."
+  - "`wc -l < /tmp/web_hosts` gives the clean count."
+
+setup:
+  - "printf 'web-01,10.0.0.1,web\nweb-02,10.0.0.2,web\ndb-01,10.0.0.3,db\nweb-01,10.0.0.4,web\ncache-01,10.0.0.5,cache\nweb-03,10.0.0.6,web\n' > /tmp/assets"
+  - "rm -f /tmp/web_hosts /tmp/web_count"
+
+checks:
+  - kind: file_exists
+    path: /tmp/web_hosts
+    describe: "web_hosts list must exist"
+  - kind: cmd_stdout_eq
+    command: "sort -u /tmp/web_hosts | wc -l"
+    expect: "3"
+    describe: "must have 3 unique web hostnames"
+  - kind: cmd_stdout_contains
+    command: "cat /tmp/web_hosts"
+    expect: "web-02"
+    describe: "web_hosts must include web-02"
+  - kind: file_contains
+    path: /tmp/web_count
+    expect: "3"
+    describe: "web_count must record 3"
+
+solution:
+  - "awk -F, '$3 == \"web\" {print $1}' /tmp/assets | sort -u > /tmp/web_hosts"
+  - "wc -l < /tmp/web_hosts > /tmp/web_count"
+
+scoring:
+  base: 250
+  hint_penalty: 30
+  par_seconds: 240

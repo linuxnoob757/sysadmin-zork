@@ -1,0 +1,57 @@
+id: t1_l3_pipes_redirects
+tier: 1
+order: 3
+title: "Pipes and Redirects"
+requires_real_vm: false
+prerequisites: [t0_l1_first_shift]
+
+intro: |
+  04:10. The audit log spits raw text — a thousand `dmesg` lines a minute,
+  none of it actionable. The NOC's "log enrichment" module is just `grep`.
+  Your job: distill `/tmp/raw.log` down to the error lines tagged `ERROR`,
+  write them to `/tmp/errors.log`, and count them. One pipeline, three stages:
+  `grep` filters, `>` writes, `wc` counts.
+
+  Task: produce /tmp/errors.log from the ERROR-filtered subset and report the
+  count in /tmp/error_count.
+
+victory_text: |
+  /tmp/errors.log holds exactly the lines tagged ERROR, and /tmp/error_count
+  shows the right number. The NOC pays you for this — it's called "Log
+  Reduction." You call it a pipe and a redirect.
+
+objectives:
+  - "Filter ERROR lines from /tmp/raw.log into /tmp/errors.log"
+  - "Write the count of error lines to /tmp/error_count"
+
+hints:
+  - "`grep ERROR /tmp/raw.log > /tmp/errors.log` filters and writes."
+  - "`wc -l < /tmp/errors.log` gives the count without the filename noise."
+  - "Chain them: filter, write, then count what you wrote."
+
+setup:
+  - "printf 'INFO boot complete\nERROR disk full on /dev/sda1\nINFO rotation ok\nERROR cpu temp 90C\nERROR network unreachable\nINFO cleanup done\n' > /tmp/raw.log"
+  - "rm -f /tmp/errors.log /tmp/error_count"
+
+checks:
+  - kind: cmd_stdout_eq
+    command: "wc -l < /tmp/errors.log"
+    expect: "3"
+    describe: "errors.log must hold exactly 3 error lines"
+  - kind: cmd_stdout_contains
+    command: "cat /tmp/errors.log"
+    expect: "disk full"
+    describe: "errors.log must contain the disk-full error"
+  - kind: file_contains
+    path: /tmp/error_count
+    expect: "3"
+    describe: "error_count must record 3"
+
+solution:
+  - "grep ERROR /tmp/raw.log > /tmp/errors.log"
+  - "wc -l < /tmp/errors.log > /tmp/error_count"
+
+scoring:
+  base: 200
+  hint_penalty: 30
+  par_seconds: 120

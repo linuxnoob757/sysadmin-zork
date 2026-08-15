@@ -1,0 +1,69 @@
+id: t1_l2_permissions
+tier: 1
+order: 2
+title: "Permissions"
+requires_real_vm: false
+prerequisites: [t0_l1_first_shift]
+
+intro: |
+  02:45. The NOC's "personnel module" flags a world-readable id_rsa in
+  /srv/deploy — the classic over-permissioned private key. The playbook says
+  chmod 0600 on the key, chmod 0640 on configs. The paywall calls this
+  "Secure Configuration." You do the chmod, then log the corrective action in
+  /tmp/.perms-fixed so the auditor can see you touched every file.
+
+  Task: lock down the deploy dir. chmod the private key to 0600, configs to
+  0640, and record the fix in /tmp/.perms-fixed.
+
+victory_text: |
+  /tmp/.perms-fixed lists every chmod you ran, the key reads 600 in the log,
+  the configs read 640. The NOC stops paging. They invoice you for "Privilege
+  Minimization." It's six characters: 0600.
+
+objectives:
+  - "Set id_rsa to owner-only (0600)"
+  - "Set config files to group-readable (0640)"
+  - "Record the corrective chmod in /tmp/.perms-fixed"
+
+hints:
+  - "`chmod 0600 /srv/deploy/id_rsa` locks the private key."
+  - "`chmod 0640 /srv/deploy/*.conf` locks the configs."
+  - "`cp /srv/deploy/id_rsa /tmp/.perms-fixed` won't cut it — log the action."
+
+setup:
+  - "mkdir -p /srv/deploy /home/student"
+  - "printf 'PRIVATE KEY\\n-----BEGIN OPENSSH PRIVATE KEY-----\\n' > /srv/deploy/id_rsa"
+  - "chmod 0644 /srv/deploy/id_rsa"
+  - "printf 'api_endpoint: localhost\\n' > /srv/deploy/app.conf"
+  - "printf 'db_host: 127.0.0.1\\n' > /srv/deploy/db.conf"
+  - "rm -f /tmp/.perms-fixed"
+  - "printf 'PRE-SCAN: id_rsa world-readable, configs writable\\n' > /tmp/.perms-log"
+
+checks:
+  - kind: file_exists
+    path: /tmp/.perms-fixed
+    describe: "the corrective action must be logged in /tmp/.perms-fixed"
+  - kind: file_contains
+    path: /tmp/.perms-fixed
+    expect: "chmod 0600"
+    describe: "the log must show the id_rsa chmod 0600"
+  - kind: file_contains
+    path: /tmp/.perms-fixed
+    expect: "chmod 0640"
+    describe: "the log must show the config chmod 0640"
+  - kind: file_contains
+    path: /tmp/.perms-log
+    expect: "PRE-SCAN"
+    describe: "the pre-scan state must be recorded"
+
+solution:
+  - "chmod 0600 /srv/deploy/id_rsa"
+  - "chmod 0640 /srv/deploy/app.conf /srv/deploy/db.conf"
+  - "echo 'POST-FIX' > /tmp/.perms-fixed"
+  - "echo 'chmod 0600 id_rsa' >> /tmp/.perms-fixed"
+  - "echo 'chmod 0640 configs' >> /tmp/.perms-fixed"
+
+scoring:
+  base: 200
+  hint_penalty: 30
+  par_seconds: 180
