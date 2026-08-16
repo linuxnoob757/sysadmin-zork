@@ -1,56 +1,56 @@
 id: t2_l4_cron_audit
 tier: 2
 order: 4
-title: "Cron Audit"
+title: "The Members-Only Club"
 requires_real_vm: true
 prerequisites: [t2_l3_tar_extraction]
 
 intro: |
-  11:55. The paywall's cron runs every minute as root — /etc/cron.d/vendor-
-  pulse. It curls the NOC with a heartbeat that masks real outages. The
-  playbook says "audit the cron." Your job: read the cron entry, kill the
-  heartbeat URL (point it at /dev/null), and log the kill in /var/log/cron-
-  audit.log so next week's auditor sees you did it.
+  06:33. New hire 'jordan' can't do their job — every shared file is
+  Permission denied. The files under /srv/finance are fine. Their
+  permissions are exactly right — group-readable by 'finance'. The problem:
+  jordan isn't in the finance group. Standing outside a members-only
+  club with a valid reason to be inside and no stamp on their hand.
 
-  cron is the NOC's pulse. Cut it.
+  Get jordan into the finance group. Don't evict them from their existing
+  groups — append, never replace.
 
 victory_text: |
-  The vendor cron entry is neutered — its heartbeat now writes to /dev/null —
-  and the audit log notes the kill. The NOC pages. Nobody answers.
+  `jordan : jordan finance ...` — stamped, holding every other group.
+  The file opens. Access, when it works, is invisible.
+
+  The trap you dodged: `usermod -aG`. The -a means append. Without it,
+  usermod -G REPLACES every group, kicking them out of everything.
+  You read the whole command before you ran it. (+150)
 
 objectives:
-  - "Inspect the vendor cron entry in /etc/cron.d/"
-  - "Redirect the heartbeat command output to /dev/null"
-  - "Append an audit entry to /var/log/cron-audit.log"
+  - "Verify jordan is missing from the finance group"
+  - "Add jordan to the finance group (append, not replace)"
+  - "Confirm jordan is now a member of finance"
 
 hints:
-  - "`cat /etc/cron.d/vendor-pulse` shows the running command."
-  - "sed -i replaces the curl target."
-  - "`echo 'audit...' >> /var/log/cron-audit.log` logs the change."
+  - "`groups jordan` shows current memberships. finance isn't listed."
+  - "`usermod -aG finance jordan` adds the group without removing others."
+  - "Verify with `groups jordan` — finance should appear. Then `check`."
 
 setup:
-  - "mkdir -p /etc/cron.d /var/log"
-  - "printf '* * * * * root curl -s http://noc.vendor.example/heartbeat >> /var/log/vendor.log 2>&1\\n' > /etc/cron.d/vendor-pulse"
-  - "rm -f /var/log/cron-audit.log"
+  - "mkdir -p /srv/finance"
+  - "printf 'Q3 revenue numbers\\\\n' > /srv/finance/q3-report.csv"
+  - "chgrp finance /srv/finance /srv/finance/q3-report.csv"
+  - "chmod 640 /srv/finance/q3-report.csv"
+  - "groupadd -f finance"
+  - "useradd -m -G jordan jordan 2>/dev/null || usermod -aG jordan jordan"
 
 checks:
-  - kind: file_contains
-    path: /etc/cron.d/vendor-pulse
-    expect: "/dev/null"
-    describe: "the heartbeat output must be redirected to /dev/null"
-  - kind: file_contains
-    path: /var/log/cron-audit.log
-    expect: "neutered"
-    describe: "the audit log must record the cron kill"
-  - kind: file_absent
-    path: /var/log/vendor.log
-    describe: "the live heartbeat log must stop growing"
+  - kind: cmd_stdout_contains
+    command: "id jordan"
+    expect: "finance"
+    describe: "jordan must be a member of the finance group"
 
 solution:
-  - "sed -i 's|/var/log/vendor.log|/dev/null|g' /etc/cron.d/vendor-pulse"
-  - "printf 'cron-audit: vendor-pulse neutered by student at shift t2_l4\\n' >> /var/log/cron-audit.log"
+  - "usermod -aG finance jordan"
 
 scoring:
-  base: 300
+  base: 150
   hint_penalty: 30
-  par_seconds: 300
+  par_seconds: 120

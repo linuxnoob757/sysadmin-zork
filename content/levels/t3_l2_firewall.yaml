@@ -1,62 +1,48 @@
 id: t3_l2_firewall
 tier: 3
 order: 2
-title: "Firewall Rules"
+title: "The Thing That Wouldn't Stay Dead"
 requires_real_vm: true
 prerequisites: [t3_l1_packet_capture]
 
 intro: |
-  17:35. The NOC's "defensive firewall" lets everything out — egress is open,
-  ingress is theater. /etc/iptables.rules.txt shows the vendor's real stance:
-  ACCEPT 0.0.0.0/0 from anywhere to port 9797. Rewrite the rules. Lock egress
-  to a single upstream, and block the vendor's canary IP (10.66.66.1) that
-  pings the NOC from the app host.
+  nginx is up. But you know it'll be down again on reboot — `systemctl
+  start` only runs it NOW. `systemctl enable` wires it to boot forever.
+  GREERSON started things but never made them permanent.
 
-  A firewall is a whitelist. The vendor wrote a wishlist.
+  Enable nginx so it survives reboot on its own, and confirm it's
+  `enabled` (not just `active`).
 
 victory_text: |
-  /etc/iptables.rules.txt now DROPs the canary IP and restricts egress to the
-  real upstream. The NOC's "compliance scan" fails on their own rules.
+  `enabled`. nginx clawss its way up after every reboot, no human
+  required. Start versus enable — now versus always. (+140)
 
 objectives:
-  - "Block the vendor canary IP (10.66.66.1)"
-  - "Restrict egress to the approved upstream (203.0.113.10)"
-  - "Set default DROP on INPUT"
+  - "Enable nginx so it starts automatically at boot"
+  - "Confirm it is currently running"
+  - "Confirm `systemctl is-enabled nginx` reports enabled"
 
 hints:
-  - "`cat /etc/iptables.rules.txt` shows the open ACCEPT policy."
-  - "Replace ACCEPT with DROP, add the canary block before any ACCEPT."
-  - "iptables-restore applies -t rules.txt."
+  - "`sudo systemctl enable nginx` wires it to boot. `--now` does enable+start together."
+  - "Verify: `systemctl is-enabled nginx` and `systemctl is-active nginx`."
+  - "Run: `sudo systemctl enable --now nginx`, then confirm both."
 
 setup:
-  - "mkdir -p /etc"
-  - "printf '*filter\\n:INPUT ACCEPT [0:0]\\n:FORWARD ACCEPT [0:0]\\n:OUTPUT ACCEPT [0:0]\\n-A INPUT -p tcp --dport 9797 -j ACCEPT\\n-A OUTPUT -d 0.0.0.0/0 -j ACCEPT\\nCOMMIT\\n' > /etc/iptables.rules.txt"
-  - "rm -f /etc/iptables.active"
+  - "systemctl disable nginx 2>/dev/null || true"
 
 checks:
-  - kind: file_contains
-    path: /etc/iptables.rules.txt
-    expect: "DROP"
-    describe: "the default INPUT policy must be DROP"
-  - kind: file_contains
-    path: /etc/iptables.rules.txt
-    expect: "10.66.66.1"
-    describe: "the canary IP must appear in a DROP rule"
-  - kind: file_contains
-    path: /etc/iptables.rules.txt
-    expect: "203.0.113.10"
-    describe: "egress must be restricted to the approved upstream"
-  - kind: file_absent
-    path: /etc/iptables.active
-    describe: "the vendor's active (open) ruleset must be removed"
+  - kind: cmd_stdout_eq
+    command: "systemctl is-enabled nginx"
+    expect: "enabled"
+    describe: "nginx must be enabled at boot"
+  - kind: cmd_succeeds
+    command: "systemctl is-active nginx"
+    describe: "nginx must be running"
 
 solution:
-  - "sed -i 's/:INPUT ACCEPT/:INPUT DROP/' /etc/iptables.rules.txt"
-  - "sed -i '/-A INPUT -p tcp --dport 9797/i -A INPUT -s 10.66.66.1 -j DROP' /etc/iptables.rules.txt"
-  - "sed -i 's/-A OUTPUT -d 0.0.0.0\/0 -j ACCEPT/-A OUTPUT -d 203.0.113.10 -j ACCEPT/' /etc/iptables.rules.txt"
-  - "rm -f /etc/iptables.active"
+  - "systemctl enable --now nginx"
 
 scoring:
-  base: 400
+  base: 140
   hint_penalty: 30
-  par_seconds: 300
+  par_seconds: 120

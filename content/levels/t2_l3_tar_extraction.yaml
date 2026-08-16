@@ -1,57 +1,60 @@
 id: t2_l3_tar_extraction
 tier: 2
 order: 3
-title: "Tarball Forensics"
+title: "The Locked Gate"
 requires_real_vm: true
 prerequisites: [t2_l2_vendor_agent]
 
 intro: |
-  10:30. The vendor's "backup engine" is a nightly cron that ships a tarball
-  to S3 — except the tarball is a shell game. Inside /var/backups/vendor-full-
-  backup.tar.gz, half the files are symlinks pointing at /dev/null, and the
-  app config is missing its TLS key. Extract it, audit the symlinks, and
-  restore the missing key.
+  04:10. `sudo` comes back with: deploy is not in the sudoers file. This
+  incident will be reported. And worse — nobody can sudo. The whole gate
+  is welded shut by a single fat-fingered line in /etc/sudoers.
 
-  tar reveals what they hid.
+  If it has one syntax error, sudo refuses EVERYONE. You don't edit
+  sudoers with a normal editor. You use `visudo` — it validates before
+  saving. `visudo -c` will tell you which line GREERSON broke.
+
+  Fix the broken line, grant the 'deploy' user sudo access, and prove
+  with `visudo -c` that the gate is sound.
 
 victory_text: |
-  The tarball is extracted, the dead symlinks are catalogued, and the TLS
-  key is back where the playbook expects it. The NOC calls it "Backup Fidelity
-  Validation." You call it unpacking a lie.
+  `/etc/sudoers: parsed OK`. The gate swings clean again. deploy can
+  run its blessed commands.
+
+  Start versus enable. visudo versus vi. The one that validates vs the
+  one that lets you lock yourself out — choose the validating one every
+  time. (+160)
 
 objectives:
-  - "Extract the vendor tarball to /tmp/backup-audit"
-  - "List dangling symlinks (pointing at /dev/null)"
-  - "Restore the missing TLS key"
+  - "Identify the syntax-error line in /etc/sudoers"
+  - "Repair the syntax error"
+  - "Grant the 'deploy' user sudo access"
+  - "Confirm `visudo -c` validates cleanly"
 
 hints:
-  - "`mkdir -p /tmp/backup-audit && tar xzf /var/backups/vendor-full-backup.tar.gz -C /tmp/backup-audit`"
-  - "`find /tmp/backup-audit -xtype l` lists broken symlinks."
-  - "Create /tmp/backup-audit/config/tls.key with real key material."
+  - "`sudo visudo -c` names the broken line."
+  - "Open with `sudo visudo`. Fix the broken line. Add `deploy ALL=(ALL) ALL`."
+  - "`sudo visudo` validates on save. Confirm with `sudo visudo -c` → 'parsed OK'."
 
 setup:
-  - "mkdir -p /var/backups /tmp/backup-audit"
-  - "printf 'app.conf\\nconfig/tls.key\\nhealth.json\\n' > /tmp/manifests.txt"
-  - "cd /tmp/backup-audit && echo 'app.conf' > file-app.conf && mkdir -p config && echo 'DEADLINK' > config/tls.key && ln -s /dev/null /tmp/backup-audit/config/deadlink"
+  - "echo 'deploy ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers"
+  - "echo 'thisisbroken line with bad syntax' >> /etc/sudoers"
 
 checks:
-  - kind: file_exists
-    path: /tmp/backup-audit/config/tls.key
-    describe: "the restored TLS key must exist"
-  - kind: file_contains
-    path: /tmp/backup-audit/config/tls.key
-    expect: "BEGIN"
-    describe: "the TLS key must contain real key material"
+  - kind: cmd_succeeds
+    command: "sudo visudo -c"
+    describe: "sudoers file must validate with no syntax errors"
   - kind: cmd_stdout_contains
-    command: "find /tmp/backup-audit -type f | wc -l"
-    expect: "1"
-    describe: "audit must find at least the restored files"
+    command: "getent group wheel"
+    expect: "deploy"
+    describe: "deploy user must have sudo/group access"
 
 solution:
-  - "printf '-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCfakekey\\n-----END PRIVATE KEY-----\\n' > /tmp/backup-audit/config/tls.key"
-  - "printf 'app.conf\\nconfig/tls.key\\nhealth.json\\n' > /tmp/backup-audit/config/inventory.txt"
+  - "sed -i '/thisisbroken line with bad syntax/d' /etc/sudoers"
+  - "sed -i 's/NOPASSWD: ALL/ALL/' /etc/sudoers"
+  - "usermod -aG wheel deploy"
 
 scoring:
-  base: 300
+  base: 160
   hint_penalty: 30
-  par_seconds: 300
+  par_seconds: 180

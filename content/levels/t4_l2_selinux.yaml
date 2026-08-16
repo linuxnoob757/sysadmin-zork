@@ -1,61 +1,45 @@
 id: t4_l2_selinux
 tier: 4
 order: 2
-title: "SELinux Policy"
+title: "The Open Window"
 requires_real_vm: true
 prerequisites: [t4_l1_systemd_hardening]
 
 intro: |
-  22:10. The NOC's "compliance scan" greets you with a wall of green — but
-  /tmp/.selinux-check shows 147 denials. The app runs with everything
-  labeled user_tmp_t. Setenforce 1, and write a local policy: the app binary
-  lives in /opt/student-app, it speaks on 8080, and it must not write to /home.
+  You found the backdoor — a listener on port 6667. But the firewall was
+  also waving traffic through to it. The wall has a hole in the shape of
+  your problem. Remove that hole permanently, then reload the firewall so
+  the window is shut for good, not just until reboot.
 
 victory_text: |
-  SELinux enforces, the denials drop, and /opt/student-app is labeled
-  properly. The NOC's green wall turns red overnight.
+  The hole's bricked over, written to disk, permanent. Port 6667 no
+  longer passes through the wall. Defense in depth — the firewall AND
+  no listener. (+140)
 
 objectives:
-  - "Set SELinux to enforcing"
-  - "Label /opt/student-app/student-app as bin_t"
-  - "Write a local policy allowing http_port_t on 8080"
-  - "Audit denials drop below threshold"
+  - "Inspect the firewall's allowed ports (firewall-cmd --list-all)"
+  - "Permanently remove the rule exposing port 6667"
+  - "Reload firewalld and confirm the port is no longer allowed"
 
 hints:
-  - "`setenforce 1` flips to enforcing (or write `enforcing` to the config)."
-  - "`semanage fcontext -a -t bin_t /opt/student-app/student-app` labels it."
-  - "Write a te policy module and `semodule -i` it."
-  - "Check `audit2allow` for leftover denials."
+  - "See what's allowed: `sudo firewall-cmd --list-all`. Look under `ports:`."
+  - "Remove it: `sudo firewall-cmd --permanent --remove-port=6667/tcp`."
+  - "Make it live: `sudo firewall-cmd --reload`. Confirm with `--list-all`."
 
 setup:
-  - "mkdir -p /opt/student-app /var/log/audit"
-  - "printf '#!/bin/bash\\nwhile true; do :; done\\n' > /opt/student-app/student-app; chmod +x /opt/student-app/student-app"
-  - "printf 'disabled\\n' > /tmp/.selinux-check"
-  - "printf '0 8080 147\\n' > /tmp/.audit-denials"
+  - "firewall-cmd --permanent --add-port=6667/tcp 2>/dev/null || true"
+  - "firewall-cmd --reload 2>/dev/null || true"
 
 checks:
-  - kind: file_contains
-    path: /tmp/.selinux-check
-    expect: "enforcing"
-    describe: "SELinux must be in enforcing mode"
-  - kind: cmd_stdout_contains
-    command: "ls -d /etc/selinux/targeted/modules/active/modules/ 2>/dev/null || ls -l /opt/student-app/student-app"
-    expect: "student-app"
-    describe: "student-app must be labeled for policy"
-  - kind: file_contains
-    path: /tmp/.audit-denials
-    expect: "0 8080"
-    describe: "the audit denials for 8080 must be reconciled to zero"
+  - kind: cmd_fails
+    command: "firewall-cmd --permanent --list-ports 2>/dev/null | grep 6667"
+    describe: "port 6667 must no longer be in the permanent port list"
 
 solution:
-  - "setenforce 1 2>/dev/null || true"
-  - "semanage fcontext -a -t bin_t /opt/student-app/student-app 2>/dev/null || true"
-  - "restorecon /opt/student-app/student-app 2>/dev/null || true"
-  - "printf '#module student_app 1.0\\nrequire { type bin_t; type http_port_t; }\\nallow bin_t http_port_t:tcp_socket name_bind;\\n' > /tmp/student_app.te"
-  - "printf 'enforcing\\n' > /tmp/.selinux-check"
-  - "printf '0 8080 0\\n' > /tmp/.audit-denials"
+  - "sudo firewall-cmd --permanent --remove-port=6667/tcp"
+  - "sudo firewall-cmd --reload"
 
 scoring:
-  base: 450
+  base: 140
   hint_penalty: 30
-  par_seconds: 420
+  par_seconds: 150

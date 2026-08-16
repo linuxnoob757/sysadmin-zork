@@ -1,60 +1,50 @@
 id: t5_l4_grafana_dashboard
 tier: 5
 order: 4
-title: "Grafana Dashboard"
+title: "What He's Running Right Now"
 requires_real_vm: true
 prerequisites: [t5_l3_node_exporter]
 
 intro: |
-  13:25. Prometheus has the data. Grafana has the glass. But the dashboard is
-  a NOC template — /etc/grafana/dashboards/student-app.json shows the vendor's
-  pretty panels with no alert thresholds. Rebuild it: a panel that graphs
-  student-app latency with a hard alert at 500ms, and a datasource entry
-  pointing at your Prometheus, not theirs.
+  The schedule's dead. But the Ferryman has a LIVE foothold running right
+  now — a backdoor process with a socket open to his IP. Find it in the
+  process table: an ss ESTAB connection to 198.51.100.66. Trace the PID to
+  its binary (probably in /tmp), kill the process, and delete the binary
+  so it can't be relaunched.
 
 victory_text: |
-  The dashboard graphs latency with a 500ms threshold, the datasource points
-  at 127.0.0.1:9090. The NOC's vendor panel sits empty.
+  Dead. Process gone, socket closed, binary wiped. You followed a live
+  socket back to a PID, a PID back to a file in /tmp, and you ended both
+  the process and the thing on disk that could relaunch it. (+200)
 
 objectives:
-  - "Create a Grafana dashboard JSON for student-app"
-  - "Add a latency panel with 500ms alert threshold"
-  - "Point the datasource at your Prometheus (127.0.0.1:9090)"
+  - "Find the established connection to the attacker IP (ss -tnp)"
+  - "Trace it to its PID and backing binary"
+  - "Kill the process and remove the binary from disk"
 
 hints:
-  - "Write /etc/grafana/dashboards/student-app.json with a panels array."
-  - "Include a threshold and an alert rule at 500."
-  - "Add a datasource JSON referencing 127.0.0.1:9090."
+  - "`sudo ss -tnp | grep 198.51.100.66` finds the live connection + PID."
+  - "Trace: `sudo ls -l /proc/<PID>/exe` shows the binary path."
+  - "Kill: `sudo kill -9 <PID>`. Remove: `sudo rm -f <binary>`."
 
 setup:
-  - "mkdir -p /etc/grafana/dashboards /etc/grafana/provisioning/datasources"
-  - "printf '{\"dashboard\":{\"title\":\"Student App\"},\"panels\":[]}' > /etc/grafana/dashboards/student-app.json"
-  - "printf '[datasources]\\nurl = http://noc.vendor.example:9090\\n' > /etc/grafana/provisioning/datasources/student.yaml"
-  - "rm -f /tmp/.grafana-ready"
+  - "mkdir -p /tmp/.cache"
+  - "nohup bash -c 'exec -a ferryman-listener /bin/bash -c \"while true; do sleep 1; done\"' >/dev/null 2>&1 &"
+  - "echo 'placeholder'"
 
 checks:
-  - kind: file_contains
-    path: /etc/grafana/dashboards/student-app.json
-    expect: "500"
-    describe: "the dashboard must set a 500ms latency threshold"
-  - kind: file_contains
-    path: /etc/grafana/dashboards/student-app.json
-    expect: "latency"
-    describe: "the dashboard must have a latency panel"
-  - kind: file_contains
-    path: /etc/grafana/provisioning/datasources/student.yaml
-    expect: "127.0.0.1:9090"
-    describe: "the datasource must point at your Prometheus"
-  - kind: file_exists
-    path: /tmp/.grafana-ready
-    describe: "the grafana readiness marker must exist"
+  - kind: cmd_fails
+    command: "ps aux 2>/dev/null | grep '[f]erryman'"
+    describe: "the backdoor process must be killed"
+  - kind: file_absent
+    path: /tmp/.ferryman-bin
+    describe: "the backdoor binary must be removed from disk"
 
 solution:
-  - "printf '{\"dashboard\":{\"title\":\"Student App\",\"panels\":[{\"type\":\"graph\",\"title\":\"Latency\",\"targets\":[{\"expr\":\"rate(app_latency_seconds_sum[5m]) / rate(app_latency_seconds_count[5m])\"}],\"alert\":{\"conditions\":[{\"evaluator\":{\"params\":[0.5],\"type\":\"gt\"},\"operator\":{\"type\":\"and\"},\"query\":{\"params\":[\"A\",\"5m\",\"now\"]}}]}}]}' > /etc/grafana/dashboards/student-app.json"
-  - "printf '[datasources]\\nurl = http://127.0.0.1:9090\\ntype = prometheus\\n' > /etc/grafana/provisioning/datasources/student.yaml"
-  - "printf 'grafana: student dashboard ready, datasource local\\n' > /tmp/.grafana-ready"
+  - "PID=$(ps aux 2>/dev/null | grep '[f]erryman' | awk '{print $2}' | head -1); kill -9 $PID 2>/dev/null; true"
+  - "rm -f /tmp/.ferryman-bin"
 
 scoring:
-  base: 550
+  base: 200
   hint_penalty: 30
-  par_seconds: 360
+  par_seconds: 180

@@ -1,62 +1,50 @@
 id: t4_l3_apparmor
 tier: 4
 order: 3
-title: "AppArmor Profile"
+title: "The Wrong Door Faces the Street"
 requires_real_vm: true
 prerequisites: [t4_l2_selinux]
 
 intro: |
-  23:20. SELinux was your hammer; AppArmor is your scalpel. The app at
-  /usr/local/bin/student-app.sh reads /etc/student-app.conf but the NOC lets
-  it write anywhere. Lock the write scope: read-only on /etc, the only write
-  dir is /var/lib/student-app, and /home is untouchable.
+  The backdoor you just pulled might have a partner: a service bound to
+  0.0.0.0, listening on every interface including the one that faces the
+  world, when it should only answer to 127.0.0.1. The firewall was the
+  only thing hiding it. Bind it to loopback so it can't be reached from
+  outside — ever, firewall or no firewall.
 
 victory_text: |
-  The profile enforces, /home is denied, /etc is read-only, /var/lib/student-app
-  is writable. The NOC's file-integrity monitor goes quiet.
+  ss shows it on 127.0.0.1:port, not 0.0.0.0. Even if the firewall falls,
+  the door doesn't open outward anymore. Layers. Always layers. (+150)
 
 objectives:
-  - "Create an AppArmor profile for the app"
-  - "Deny /home/** writes"
-  - "Allow /etc/student-app.conf read, /var/lib/student-app write"
+  - "Find the service binding to 0.0.0.0 on a high port"
+  - "Kill that process and relaunch it bound to 127.0.0.1 only"
+  - "Confirm with ss that it no longer listens on 0.0.0.0"
 
 hints:
-  - "Write /etc/apparmor.d/usr.local.bin-student-app.sh."
-  - "Use deny /home/** to block home writes."
-  - "aa-enforce the profile."
+  - "`sudo ss -tlnp` shows listeners. Anything bound to 0.0.0.0 faces the street."
+  - "Kill the offender by PID, then relaunch on 127.0.0.1."
+  - "Verify: the offender should now show 127.0.0.1, not 0.0.0.0."
 
 setup:
-  - "mkdir -p /etc/apparmor.d /etc /usr/local/bin /var/lib/student-app /home/student"
-  - "printf '#!/bin/bash\\necho ok\\n' > /usr/local/bin/student-app.sh"
-  - "chmod +x /usr/local/bin/student-app.sh"
-  - "printf 'api_key: deadbeef\\n' > /etc/student-app.conf"
-  - "printf '#include <tunables/global>\\n/usr/local/bin/student-app.sh {\\n  #include <abstractions/base>\\n  /etc/student-app.conf r,\\n  /home/** rw,\\n}\\n' > /etc/apparmor.d/usr.local.bin-student-app.sh"
-  - "printf 'unconfined\\n' > /tmp/.apparmor-state"
+  - "python3 -c 'import socket,time; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); s.bind((\"0.0.0.0\",6666)); s.listen(5); time.sleep(99999)' &"
+  - "sleep 1"
 
 checks:
-  - kind: file_contains
-    path: /etc/apparmor.d/usr.local.bin-student-app.sh
-    expect: "deny /home"
-    describe: "the profile must deny /home writes"
-  - kind: file_contains
-    path: /etc/apparmor.d/usr.local.bin-student-app.sh
-    expect: "/var/lib/student-app"
-    describe: "the profile must allow /var/lib/student-app"
-  - kind: file_contains
-    path: /etc/apparmor.d/usr.local.bin-student-app.sh
-    expect: "/etc/student-app.conf r"
-    describe: "the profile must allow read on the config"
-  - kind: file_contains
-    path: /tmp/.apparmor-state
-    expect: "enforce"
-    describe: "the profile must be enforced"
+  - kind: cmd_fails
+    command: "ss -tln 2>/dev/null | grep '0.0.0.0:6666'"
+    describe: "nothing may listen on 0.0.0.0:6666 anymore"
+  - kind: cmd_stdout_contains
+    command: "ss -tln 2>/dev/null | grep '127.0.0.1:6666'"
+    expect: "127.0.0.1:6666"
+    describe: "the service must bind to 127.0.0.1:6666 (loopback only)"
 
 solution:
-  - "sed -i 's|/home/\\*\\* rw,|deny /home/** wl,|' /etc/apparmor.d/usr.local.bin-student-app.sh"
-  - "sed -i 's|/etc/student-app.conf r,|/etc/student-app.conf r,\\n  owner /var/lib/student-app/** rw,|' /etc/apparmor.d/usr.local.bin-student-app.sh"
-  - "printf 'enforce\\n' > /tmp/.apparmor-state"
+  - "PID=$(ss -tlnp 2>/dev/null | grep '0.0.0.0:6666' | head -1); kill $(echo \"$PID\" | grep -oP 'pid=\\K[0-9]+' | head -1) 2>/dev/null; true"
+  - "python3 -c 'import socket,time; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); s.bind((\"127.0.0.1\",6666)); s.listen(5); time.sleep(99999)' &"
+  - "sleep 1"
 
 scoring:
-  base: 450
+  base: 150
   hint_penalty: 30
-  par_seconds: 360
+  par_seconds: 150

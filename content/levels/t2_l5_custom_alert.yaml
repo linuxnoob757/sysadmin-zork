@@ -1,57 +1,63 @@
 id: t2_l5_custom_alert
 tier: 2
 order: 5
-title: "Custom Alert"
+title: "The Shared Table"
 requires_real_vm: true
 prerequisites: [t2_l4_cron_audit]
 
 intro: |
-  13:40. The vendor's dashboards are pretty glass boxes — all color, no
-  signal. The real alert lives in /etc/vendor/trigger.yaml: a 90th-percentile
-  latency threshold that fires only during their demo window. Bypass it.
-  Write your own alert to /etc/alerts/student-trigger.yaml that fires on a
-  flat-line (zero throughput = app dead).
+  08:55. /srv/shared is meant to be a common table where the 'staff'
+  group drops files. But every file someone creates lands owned by their
+  PRIVATE group, so nobody else can edit it. And anyone can wipe anyone's
+  work on the way out. A shared table where you can't touch what others
+  put down but you CAN sweep the whole thing away.
 
-  Your alert > their demo.
+  Two special bits fix this:
+  - SETGID (chmod g+s) makes new files inherit the directory's group.
+  - STICKY (chmod +t) says "you can only delete files you own."
+
+  Set the directory's group to 'staff', then apply setgid and sticky.
 
 victory_text: |
-  /etc/alerts/student-trigger.yaml holds an honest threshold-based check,
-  and the vendor trigger is commented out. The NOC's pretty boxes still glow —
-  but yours is the one that matters.
+  `drwxrwsr-t`. Setgid, sticky, staff group. The table works now —
+  everyone can collaborate, nobody can wipe the table but their own plate.
+
+  Layers of control on a single directory. GREERSON announced the
+  concept and never wired it up. You built it in four commands and
+  genuine understanding of what s and t do. (+200)
 
 objectives:
-  - "Inspect the vendor alert trigger"
-  - "Comment out the vendor's demo-window threshold"
-  - "Write an honest flat-line alert to /etc/alerts/"
+  - "Set the group of /srv/shared to 'staff'"
+  - "Apply the setgid bit (chmod g+s)"
+  - "Apply the sticky bit (chmod +t)"
+  - "Confirm with ls -ld that both bits are set"
 
 hints:
-  - "`cat /etc/vendor/trigger.yaml` shows the fake thresholds."
-  - "sed -i 's/^/#/' comments the vendor lines."
-  - "Write your trigger with a throughput < 1 condition."
+  - "First: `chgrp staff /srv/shared`. Then set both bits: `chmod g+s /srv/shared` and `chmod +t /srv/shared`."
+  - "Or all at once: `chmod g+s,+t /srv/shared` (or `chmod 3775` if staff has rwx)."
+  - "Verify with `ls -ld /srv/shared` — look for `s` (setgid) and `t` (sticky) in the permission string."
 
 setup:
-  - "mkdir -p /etc/vendor /etc/alerts"
-  - "printf 'name: vendor-latency-demo\\nthreshold:\\n  p90: 800ms\\n  window: \"09:00-17:00\"\\n  silence: true\\n' > /etc/vendor/trigger.yaml"
-  - "rm -f /etc/alerts/student-trigger.yaml"
+  - "mkdir -p /srv/shared"
+  - "chgrp root /srv/shared"
+  - "chmod 777 /srv/shared"
+  - "groupadd -f staff"
 
 checks:
-  - kind: file_contains
-    path: /etc/vendor/trigger.yaml
-    expect: "#name: vendor-latency-demo"
-    describe: "the vendor trigger must be commented out"
-  - kind: file_exists
-    path: /etc/alerts/student-trigger.yaml
-    describe: "a student trigger must exist in /etc/alerts/"
-  - kind: file_contains
-    path: /etc/alerts/student-trigger.yaml
-    expect: "throughput"
-    describe: "the student alert must check throughput"
+  - kind: cmd_succeeds
+    command: "test -g /srv/shared && test -k /srv/shared"
+    describe: "the directory must have setgid and sticky bits set"
+  - kind: cmd_stdout_contains
+    command: "stat -c '%A' /srv/shared"
+    expect: "t"
+    describe: "sticky bit (t) must be visible in the permission string"
 
 solution:
-  - "sed -i 's/^/#/' /etc/vendor/trigger.yaml"
-  - "printf 'name: student-flatline\\ncondition:\\n  metric: throughput\\n  operator: lt\\n  threshold: 1\\n  action: page-student\\n' > /etc/alerts/student-trigger.yaml"
+  - "chgrp staff /srv/shared"
+  - "chmod g+s /srv/shared"
+  - "chmod +t /srv/shared"
 
 scoring:
-  base: 350
+  base: 200
   hint_penalty: 30
-  par_seconds: 300
+  par_seconds: 180

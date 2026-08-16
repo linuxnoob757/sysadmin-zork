@@ -1,69 +1,64 @@
 id: t1_l2_permissions
 tier: 1
 order: 2
-title: "Permissions"
+title: "The Hidden File"
 requires_real_vm: false
 prerequisites: [t1_l1_directory_layout]
 
 intro: |
-  02:45. The NOC's "personnel module" flags a world-readable id_rsa in
-  /srv/deploy — the classic over-permissioned private key. The playbook says
-  chmod 0600 on the key, chmod 0640 on configs. The paywall calls this
-  "Secure Configuration." You do the chmod, then log the corrective action in
-  /tmp/.perms-fixed so the auditor can see you touched every file.
+  10:47 PM. The pager coughs up something almost human — a note from
+  GREERSON's old work account, timestamped three minutes before he
+  vanished:
 
-  Task: lock down the deploy dir. chmod the private key to 0600, configs to
-  0640, and record the fix in /tmp/.perms-fixed.
+      "RECOVERY CODE IS WHERE YOU LOOK BUT DONT SEE"
+
+  Even gone, the man can't resist a riddle. "Where you look but
+  don't see" — on a Linux box that's one thing and one thing only: a
+  dotfile. A file whose name starts with '.', sitting in plain sight
+  in your home directory, politely invisible to any lazy `ls` that
+  doesn't know to ask for more.
+
+  Find the hidden dotfile in your home directory. Inside it: a recovery
+  code. Read it, then write that code — just the code — into a file
+  called 'answer' in your home directory.
 
 victory_text: |
-  /tmp/.perms-fixed lists every chmod you ran, the key reads 600 in the log,
-  the configs read 640. The NOC stops paging. They invoice you for "Privilege
-  Minimization." It's six characters: 0600.
+  You saw what was sitting there the whole time. The code checks out,
+  copied clean into ~/answer, no smirk required.
+
+  Hidden was never gone. Half this job is just knowing to add the '-a'
+  — to make a system show you the things it tucks politely out of sight.
+  Configs. Credentials. The quiet truth of how a machine really behaves
+  when it thinks nobody's looking. All dotfiles, in their way. (+120)
 
 objectives:
-  - "Set id_rsa to owner-only (0600)"
-  - "Set config files to group-readable (0640)"
-  - "Record the corrective chmod in /tmp/.perms-fixed"
+  - "Reveal the hidden dotfile in your home directory (ls -a)"
+  - "Read the recovery code inside it"
+  - "Write that exact code into ~/answer"
 
 hints:
-  - "`chmod 0600 /srv/deploy/id_rsa` locks the private key."
-  - "`chmod 0640 /srv/deploy/*.conf` locks the configs."
-  - "`cp /srv/deploy/id_rsa /tmp/.perms-fixed` won't cut it — log the action."
+  - "A plain `ls` won't show it. Files starting with a dot are hidden. Try `ls -a ~`."
+  - "Find the dotfile that isn't standard shell config, and `cat` it to read the code."
+  - "Read the file with cat, then write the code: `echo 'THECODE' > ~/answer` (swap in the real code), then `check`."
 
 setup:
-  - "mkdir -p /srv/deploy /home/student"
-  - "printf 'PRIVATE KEY\\n-----BEGIN OPENSSH PRIVATE KEY-----\\n' > /srv/deploy/id_rsa"
-  - "chmod 0644 /srv/deploy/id_rsa"
-  - "printf 'api_endpoint: localhost\\n' > /srv/deploy/app.conf"
-  - "printf 'db_host: 127.0.0.1\\n' > /srv/deploy/db.conf"
-  - "rm -f /tmp/.perms-fixed"
-  - "printf 'PRE-SCAN: id_rsa world-readable, configs writable\\n' > /tmp/.perms-log"
+  - "echo 'RECOVERY_CODE: zork-7th-mistake-42' > /home/student/.recovery-code"
+  - "rm -f /home/student/answer"
 
 checks:
   - kind: file_exists
-    path: /tmp/.perms-fixed
-    describe: "the corrective action must be logged in /tmp/.perms-fixed"
+    path: /home/student/answer
+    describe: "an 'answer' file must exist in the home directory"
   - kind: file_contains
-    path: /tmp/.perms-fixed
-    expect: "chmod 0600"
-    describe: "the log must show the id_rsa chmod 0600"
-  - kind: file_contains
-    path: /tmp/.perms-fixed
-    expect: "chmod 0640"
-    describe: "the log must show the config chmod 0640"
-  - kind: file_contains
-    path: /tmp/.perms-log
-    expect: "PRE-SCAN"
-    describe: "the pre-scan state must be recorded"
+    path: /home/student/answer
+    expect: "zork-7th-mistake-42"
+    describe: "answer must contain the recovery code from the dotfile"
 
 solution:
-  - "chmod 0600 /srv/deploy/id_rsa"
-  - "chmod 0640 /srv/deploy/app.conf /srv/deploy/db.conf"
-  - "echo 'POST-FIX' > /tmp/.perms-fixed"
-  - "echo 'chmod 0600 id_rsa' >> /tmp/.perms-fixed"
-  - "echo 'chmod 0640 configs' >> /tmp/.perms-fixed"
+  - "cat /home/student/.recovery-code"
+  - "echo 'zork-7th-mistake-42' > /home/student/answer"
 
 scoring:
-  base: 200
+  base: 120
   hint_penalty: 30
-  par_seconds: 180
+  par_seconds: 90

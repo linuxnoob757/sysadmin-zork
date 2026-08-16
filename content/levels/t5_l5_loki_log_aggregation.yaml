@@ -1,60 +1,54 @@
 id: t5_l5_loki_log_aggregation
 tier: 5
 order: 5
-title: "Loki Log Aggregation"
+title: "Changing the Locks"
 requires_real_vm: true
 prerequisites: [t5_l4_grafana_dashboard]
 
 intro: |
-  14:50. Dashboards show metrics; logs are the body. Loki isn't configured —
-  /etc/loki/local-config.yaml has the vendor's push endpoint, not yours.
-  Reconfigure it to scrape /var/log/student-app.log locally, and query a
-  label filter so the NOC's "noisy neighbor" won't drown your stream.
+  He's evicted from processes and schedules. But one key may remain — a
+  public key dropped into an authorized_keys file somewhere. That's a
+  door he can reopen anytime, no brute-force needed. Check every
+  authorized_keys file: root's, student's, any service account. Find the
+  rogue key and remove it. Leave only keys you recognize.
 
 victory_text: |
-  Loki scrapes the local app log, the push target is 127.0.0.1:3100, and the
-  query filter isolates student-app. The NOC's vendor endpoint stays mute.
+  The last key turns. Comb every authorized_keys file, find the one he
+  planted, cut it out. The door opens for you and for no one else.
+  Take your house back. (+200)
 
 objectives:
-  - "Reconfigure Loki to scrape /var/log/student-app.log"
-  - "Point the push endpoint to 127.0.0.1:3100"
-  - "Add a label filter for student-app only"
+  - "Inspect authorized_keys in /root/.ssh, /home/*/.ssh"
+  - "Identify the unauthorized public key (the Ferryman's)"
+  - "Remove it, leaving only trusted keys"
 
 hints:
-  - "Edit /etc/loki/local-config.yaml."
-  - "Set the scrape target to the local log file."
-  - "Replace the vendor push URL with 127.0.0.1:3100."
+  - "Check every file: `sudo cat /root/.ssh/authorized_keys`, `sudo cat /home/*/.ssh/authorized_keys`."
+  - "Each line is one key with a trailing comment. The rogue one looks out of place."
+  - "Edit to remove the rogue line, keeping only your own key. Verify file perms: `chmod 600`, owner correct."
 
 setup:
-  - "mkdir -p /etc/loki /var/log"
-  - "printf 'auth_enabled: false\\nserver:\\n  http_listen_port: 3100\\npositions:\\n  filename: /tmp/loki-positions.yaml\\nscrape_configs:\\n  - job_name: system\\n    static_configs:\\n      - targets:\\n          - localhost:9090\\n    pipeline_stages:\\n      - labels:\\n          job: nginx\\n' > /etc/loki/local-config.yaml"
-  - "printf 'logs: vendor endpoint\\n' > /tmp/.loki-state"
-  - "printf 'app ok\\n' > /var/log/student-app.log"
+  - "mkdir -p /root/.ssh /home/student/.ssh"
+  - "printf 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQfake_your_own_key user@host\\\\n' > /root/.ssh/authorized_keys"
+  - "printf 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQfake_your_own_key user@host\\\\n' > /home/student/.ssh/authorized_keys"
+  - "printf 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAICferryman-backdoor-key 198.51.100.66\\\\n' >> /root/.ssh/authorized_keys"
+  - "printf 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAICferryman-backdoor-key 198.51.100.66\\\\n' >> /home/student/.ssh/authorized_keys"
+  - "chmod 600 /root/.ssh/authorized_keys /home/student/.ssh/authorized_keys"
 
 checks:
-  - kind: file_contains
-    path: /etc/loki/local-config.yaml
-    expect: "/var/log/student-app.log"
-    describe: "loki must scrape the local student-app log"
-  - kind: file_contains
-    path: /etc/loki/local-config.yaml
-    expect: "127.0.0.1:3100"
-    describe: "the push target must be local (127.0.0.1:3100)"
-  - kind: file_contains
-    path: /etc/loki/local-config.yaml
-    expect: "student-app"
-    describe: "the label filter must isolate student-app"
-  - kind: file_contains
-    path: /tmp/.loki-state
-    expect: "fixed"
-    describe: "the loki reconfig must be marked complete"
+  - kind: cmd_fails
+    command: "grep -rl 'ferryman' /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys 2>/dev/null"
+    describe: "no authorized_keys file may contain the Ferryman's backdoor key"
+  - kind: cmd_stdout_eq
+    command: "grep -c 'your_own_key' /root/.ssh/authorized_keys"
+    expect: "1"
+    describe: "your own trusted key must remain in root's authorized_keys"
 
 solution:
-  - "sed -i 's|targets:|    - targets:\\n        - /var/log/student-app.log\\n      labels:\\n        job: student-app\\n      pipeline_stages:\\n        - labels:\\n            app: student-app|' /etc/loki/local-config.yaml"
-  - "sed -i 's|http_listen_port: 3100|http_listen_port: 3100\\n  grpc_listen_port: 9096|' /etc/loki/local-config.yaml"
-  - "printf 'logs: local scrape, student-app label, fixed\\n' > /tmp/.loki-state"
+  - "sed -i '/ferryman/d' /root/.ssh/authorized_keys"
+  - "sed -i '/ferryman/d' /home/student/.ssh/authorized_keys"
 
 scoring:
-  base: 550
+  base: 200
   hint_penalty: 30
-  par_seconds: 360
+  par_seconds: 180

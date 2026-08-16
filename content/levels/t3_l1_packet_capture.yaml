@@ -1,54 +1,49 @@
 id: t3_l1_packet_capture
 tier: 3
 order: 1
-title: "Packet Capture"
+title: "The Body in the Logs"
 requires_real_vm: true
 prerequisites: [t2_l6_vendor_api]
 
 intro: |
-  16:10. The NOC's wires are live but they never show you the packets. They
-  hand you a sanitized pcap — "evidence" that the app is healthy. Run tcpdump
-  yourself. Capture 30s of traffic on lo on port 9797 (the vendor stub you
-  ran), and prove the NOC's "healthy" packet is your own echo.
+  The web server just vanished. curl: Connection refused. Not permission
+  denied — refused. Nobody's home. nginx is dead on the floor of the
+  process table and nobody called it in.
 
-  Trust nothing on the wire.
+  A systemd box keeps a record of every death. `journalctl -u nginx` holds
+  the autopsy — every log line the service gasped on its way out. Read
+  why it died, then bring it back with `systemctl start`.
 
 victory_text: |
-  /tmp/capture.pcap holds 30 seconds of localhost traffic on 9797, and the
-  audit log flags that the NOC's "external" check was local. The NOC calls
-  it "Network Observability." You prove it's theater.
+  `active (running)`. You read the journal, saw what dropped it, and
+  brought it back knowing why it fell. Diagnosis, not reboot. (+130)
 
 objectives:
-  - "Capture loopback traffic on port 9797 for 30s"
-  - "Confirm the capture is non-empty"
-  - "Log that the NOC check was local, not external"
+  - "Inspect why nginx stopped (journalctl -u nginx)"
+  - "Start the nginx service"
+  - "Confirm it reports active (running)"
 
 hints:
-  - "`timeout 30 tcpdump -i lo port 9797 -w /tmp/capture.pcap` runs the capture."
-  - "In another shell, `curl 127.0.0.1:9797/health` during capture."
-  - "`ls -l /tmp/capture.pcap` confirms bytes were written."
+  - "`sudo journalctl -u nginx -n 30 --no-pager` shows the last log lines."
+  - "Restart it: `sudo systemctl start nginx`."
+  - "Verify: `systemctl is-active nginx` → 'active'."
 
 setup:
-  - "rm -f /tmp/capture.pcap /tmp/.wire-audit"
+  - "systemctl stop nginx 2>/dev/null || true"
 
 checks:
-  - kind: file_exists
-    path: /tmp/capture.pcap
-    describe: "the pcap capture must exist"
-  - kind: cmd_stdout_eq
-    command: "stat -c %s /tmp/capture.pcap"
-    expect: "0"
-    describe: "the pcap must be non-empty (size > 0)"
-  - kind: file_contains
-    path: /tmp/.wire-audit
-    expect: "local"
-    describe: "the audit must flag the NOC check as local"
+  - kind: cmd_succeeds
+    command: "systemctl is-active nginx"
+    describe: "nginx must be active (running)"
+  - kind: cmd_stdout_contains
+    command: "systemctl status nginx"
+    expect: "active"
+    describe: "systemctl status must show active"
 
 solution:
-  - "timeout 30 tcpdump -i lo port 9797 -w /tmp/capture.pcap 2>/dev/null || true"
-  - "printf 'wire-audit: NOC port-9797 check was local loopback, not external\\n' > /tmp/.wire-audit"
+  - "systemctl start nginx"
 
 scoring:
-  base: 350
+  base: 130
   hint_penalty: 30
-  par_seconds: 60
+  par_seconds: 120

@@ -1,86 +1,60 @@
 id: t1_l1_directory_layout
 tier: 1
 order: 1
-title: "Directory Layout"
+title: "Lost in the Filesystem"
 requires_real_vm: false
 prerequisites: [t0_l1_first_shift]
 
 intro: |
-  01:15. The pager's a lie. The app's "down" marker was never an app — it was a
-  placeholder. Your real brief lands in /srv/inventory. A config dump, three
-  hosts tagged web-01, db-01, cache-01, and a directory tree that someone
-  half-deleted. The NOC playbook says "trust the hierarchy." You say: show me
-  the tree.
+  01:15. The pager coughs up a single line, all caps, no context:
 
-  Task: rebuild the inventory structure under /srv/inventory from the debris.
-  Each host needs a config dir, a logs dir, and a `.managed` marker confirming
-  you touched it. Then prove the layout with `find`.
+      CANT FIND THE VAULT
+
+  No path. No breadcrumb. Classic GREERSON — he carried the whole layout
+  of this filesystem in his head like a man hoarding the only map in a
+  maze, and when he walked out he took it with him. Documentation was
+  beneath him.
+
+  Here's what you can piece together: somewhere on this box there's a
+  directory the deploy team calls the vault — /srv/company/vault. They
+  swear it's there. Get yourself to it. Stand inside it. Then prove you
+  found it in the dark — drop a file named 'found' in the vault.
+
+  Four words keep you breathing on nights like this: pwd, ls, cd, find.
 
 victory_text: |
-  /srv/inventory/{web-01,db-01,cache-01} each hold conf/ logs/ and .managed.
-  The NOC can stop paging you. It'll bill you for "Configuration Baselining"
-  next.
+  /srv/company/vault/found — signed, dated, witnessed by the hum of the
+  racks. You found your footing in a filesystem you'd never seen, with no
+  map and no help, using nothing but pwd and ls and your own two feet.
+
+  The thing about getting lost: you learn to check where you're standing
+  before you throw a single punch. (+130)
 
 objectives:
-  - "Create config + logs dirs for each host under /srv/inventory"
-  - "Mark each host as managed with a .managed flag file"
-  - "Verify the full tree with find"
+  - "Navigate to /srv/company/vault"
+  - "Create a file named 'found' inside the vault"
 
 hints:
-  - "`ls /srv/inventory` — see what's left of the half-deleted structure."
-  - "`mkdir -p /srv/inventory/HOST/conf /srv/inventory/HOST/logs` per host."
-  - "`find /srv/inventory -type f` confirms every .managed marker is present."
+  - "Lost is just not knowing where you are. `pwd` prints your current directory; `ls` shows what's around. `cd /srv/company/vault` walks there in one step."
+  - "If you're not sure the path is right, `ls -ld /srv/company/vault` confirms it's a real directory before you commit to cd."
+  - "Stand inside the vault: `cd /srv/company/vault`, then `touch found`, then `check`."
 
 setup:
-  - "mkdir -p /srv/inventory"
-  - "echo 'corrupted' > /srv/inventory/.broken-state"
-  - "mkdir -p /srv/inventory/web-01"
-  - "rm -f /srv/inventory/web-01/.managed"
-  - "rm -f /srv/inventory/db-01/.managed"
-  - "rm -f /srv/inventory/cache-01/.managed"
-  - "rm -rf /srv/inventory/web-01/conf /srv/inventory/web-01/logs"
-  - "rm -rf /srv/inventory/db-01/conf /srv/inventory/db-01/logs"
-  - "rm -rf /srv/inventory/cache-01/conf /srv/inventory/cache-01/logs"
+  - "mkdir -p /srv/company/vault"
+  - "rm -f /srv/company/vault/found"
 
 checks:
   - kind: file_exists
-    path: /srv/inventory/web-01/conf
-    describe: "web-01 must have a conf dir"
-  - kind: file_exists
-    path: /srv/inventory/web-01/logs
-    describe: "web-01 must have a logs dir"
-  - kind: file_exists
-    path: /srv/inventory/web-01/.managed
-    describe: "web-01 must be marked managed"
-  - kind: file_exists
-    path: /srv/inventory/db-01/conf
-    describe: "db-01 must have a conf dir"
-  - kind: file_exists
-    path: /srv/inventory/db-01/logs
-    describe: "db-01 must have a logs dir"
-  - kind: file_exists
-    path: /srv/inventory/db-01/.managed
-    describe: "db-01 must be marked managed"
-  - kind: file_exists
-    path: /srv/inventory/cache-01/conf
-    describe: "cache-01 must have a conf dir"
-  - kind: file_exists
-    path: /srv/inventory/cache-01/logs
-    describe: "cache-01 must have a logs dir"
-  - kind: file_exists
-    path: /srv/inventory/cache-01/.managed
-    describe: "cache-01 must be marked managed"
-  - kind: cmd_stdout_contains
-    command: "find /srv/inventory -name .managed | wc -l"
-    expect: "3"
-    describe: "find must report exactly 3 managed hosts"
+    path: /srv/company/vault/found
+    describe: "a file named 'found' must exist inside the vault directory"
+  - kind: cmd_succeeds
+    command: "test -f /srv/company/vault/found"
+    describe: "the 'found' file must exist inside the vault directory"
 
 solution:
-  - "mkdir -p /srv/inventory/web-01/conf /srv/inventory/web-01/logs /srv/inventory/db-01/conf /srv/inventory/db-01/logs /srv/inventory/cache-01/conf /srv/inventory/cache-01/logs"
-  - "touch /srv/inventory/web-01/.managed /srv/inventory/db-01/.managed /srv/inventory/cache-01/.managed"
-  - "rm -f /srv/inventory/.broken-state"
+  - "touch /srv/company/vault/found"
 
 scoring:
-  base: 200
+  base: 130
   hint_penalty: 30
-  par_seconds: 180
+  par_seconds: 120

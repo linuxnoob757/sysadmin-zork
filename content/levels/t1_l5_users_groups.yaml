@@ -1,73 +1,62 @@
 id: t1_l5_users_groups
 tier: 1
 order: 5
-title: "Users and Groups"
+title: "Redirect the Flow"
 requires_real_vm: false
 prerequisites: [t1_l4_find_grep_awk]
 
 intro: |
-  08:40. The NOC has a "personnel module" — three new hires, each needing a
-  home and a team. The playbook says useradd -m, groupadd, usermod -aG. The
-  paywall calls this "Identity Lifecycle Management." You call it the file
-  at /etc/group backed by /etc/passwd.
+  05:30 AM. Last fire of the night, and of course it's paperwork.
 
-  Your job: create a `dev` group, add two service accounts (svc_web,
-  svc_db) to it with home directories, and prove membership in /etc/group
-  and /etc/passwd.
+  Overnight the batch job vomited 40,000 lines into /var/log/batch/run.log.
+  Buried in the noise are the lines stamped ERROR. The morning report
+  needs them pulled clean — just the errors, each unique one counted,
+  sorted so the worst repeat offender sits at the top.
+
+  You won't read 40,000 lines. You'll build a machine out of pipes and
+  redirection that reads them for you: filter the noise, tally what's
+  left, pour the result into /var/reports/errors.txt.
 
 victory_text: |
-  svc_web and svc_db appear in /etc/passwd with /home/svc_web and
-  /home/svc_db as their home dirs, and /etc/group lists them both under dev.
-  They bill you for "Automated Provisioning." You did it in three lines of
-  shell.
+  Forty thousand lines of noise, boiled down to a report a tired human can
+  read. /var/reports/errors.txt — clean, counted, sorted, worst-first.
+
+  You plumbed it: grep to filter, sort and uniq to tally, a single '>' to
+  pour it where it belongs. A good admin is mostly a plumber who bills
+  better. (+150)
 
 objectives:
-  - "Create the dev group in /etc/group"
-  - "Add svc_web and svc_db to /etc/passwd with dev membership"
-  - "Verify with getent group dev"
+  - "Extract ERROR lines from /var/log/batch/run.log"
+  - "Produce a unique, count-sorted list in /var/reports/errors.txt"
 
 hints:
-  - "Append `dev:x:1000:` to /etc/group."
-  - "Append passwd entries: `svc_web:x:1001:1000::/home/svc_web:/bin/bash`."
-  - "`getent group dev` prints the group + members."
+  - "Chain of tools joined by pipes: `grep ERROR /var/log/batch/run.log`."
+  - "The classic tally: `grep ERROR ... | sort | uniq -c | sort -nr`. uniq -c counts, sort -nr puts biggest first."
+  - "Full line: `grep ERROR /var/log/batch/run.log | sort | uniq -c | sort -nr > /var/reports/errors.txt`. Make the dir first: `mkdir -p /var/reports`. Then `check`."
 
 setup:
-  - "mkdir -p /etc /home"
-  - "rm -f /etc/group /etc/passwd /etc/group.pre-t1"
-  - "cp /etc/group 2>/dev/null || true"
-  - "printf 'dev:x:99999:\\n' > /etc/group"
-  - "printf 'svc_web:x:1001:1001::/home/svc_web:/bin/bash\\n' > /etc/passwd 2>/dev/null || true"
-  - "printf 'svc_db:x:2001:2001::/home/svc_db:/bin/bash\\n' >> /etc/passwd 2>/dev/null || true"
+  - "mkdir -p /var/log/batch /var/reports"
+  - "printf 'INFO boot complete\\\\nERROR disk full on /dev/sda1\\\\nERROR disk full on /dev/sda1\\\\nINFO rotation ok\\\\nERROR cpu temp 90C\\\\nERROR network unreachable\\\\nERROR disk full on /dev/sda1\\\\nINFO cleanup done\\\\n' > /var/log/batch/run.log"
+  - "rm -f /var/reports/errors.txt"
 
 checks:
   - kind: file_exists
-    path: /home/svc_web
-    describe: "svc_web must have a home directory"
-  - kind: file_exists
-    path: /home/svc_db
-    describe: "svc_db must have a home directory"
-  - kind: file_contains
-    path: /etc/group
-    expect: "dev"
-    describe: "the dev group must exist in /etc/group"
-  - kind: file_contains
-    path: /etc/passwd
-    expect: "/home/svc_web"
-    describe: "svc_web must have a home entry in /etc/passwd"
-  - kind: file_contains
-    path: /etc/passwd
-    expect: "/home/svc_db"
-    describe: "svc_db must have a home entry in /etc/passwd"
+    path: /var/reports/errors.txt
+    describe: "the report file must exist"
+  - kind: cmd_stdout_contains
+    command: "head -1 /var/reports/errors.txt"
+    expect: "ERROR disk full"
+    describe: "the report must be sorted worst-first (top error is the repeated one)"
+  - kind: cmd_stdout_eq
+    command: "wc -l < /var/reports/errors.txt"
+    expect: "3"
+    describe: "exactly 3 unique error types"
 
 solution:
-  - "printf 'dev:x:1000:svc_web,svc_db\\n' >> /etc/group"
-  - "printf 'svc_web:x:1001:1000::/home/svc_web:/bin/bash\\n' >> /etc/passwd"
-  - "printf 'svc_db:x:1002:1000::/home/svc_db:/bin/bash\\n' >> /etc/passwd"
-  - "mkdir -p /home/svc_web /home/svc_db"
-  - "echo 'svc_web primary grp: 1000' > /home/svc_web/.profile"
-  - "echo 'svc_db primary grp: 1000' > /home/svc_db/.profile"
+  - "mkdir -p /var/reports"
+  - "grep ERROR /var/log/batch/run.log | sort | uniq -c | sort -nr > /var/reports/errors.txt"
 
 scoring:
-  base: 250
+  base: 150
   hint_penalty: 30
-  par_seconds: 180
+  par_seconds: 150

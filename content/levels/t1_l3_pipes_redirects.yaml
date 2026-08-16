@@ -1,57 +1,58 @@
 id: t1_l3_pipes_redirects
 tier: 1
 order: 3
-title: "Pipes and Redirects"
+title: "Needle in the Haystack"
 requires_real_vm: false
 prerequisites: [t1_l2_permissions]
 
 intro: |
-  04:10. The audit log spits raw text — a thousand `dmesg` lines a minute,
-  none of it actionable. The NOC's "log enrichment" module is just `grep`.
-  Your job: distill `/tmp/raw.log` down to the error lines tagged `ERROR`,
-  write them to `/tmp/errors.log`, and count them. One pipeline, three stages:
-  `grep` filters, `>` writes, `wc` counts.
+  03:14 AM. The hour when bad decisions come home to roost.
 
-  Task: produce /tmp/errors.log from the ERROR-filtered subset and report the
-  count in /tmp/error_count.
+  The web app is bleeding debug output straight to real customers —
+  stack traces, internal file paths, the guts of the machine spilled
+  across the screen. Somewhere under /etc/app GREERSON flipped
+  DEBUG=on — "just to check something" — and then did what he always
+  did: got bored, wandered off, never flipped it back.
+
+  There are hundreds of config files under /etc/app. Exactly one of
+  them carries the line DEBUG=on. Find the guilty file. Flip it to
+  DEBUG=off, leaving all other files untouched.
 
 victory_text: |
-  /tmp/errors.log holds exactly the lines tagged ERROR, and /tmp/error_count
-  shows the right number. The NOC pays you for this — it's called "Log
-  Reduction." You call it a pipe and a redirect.
+  One line, buried in a haystack of hundreds, dragged into the light.
+  DEBUG's off. You didn't read every file. You asked the right question
+  and let `grep` do the reading — which is the entire difference between
+  an admin and a martyr. (+150)
 
 objectives:
-  - "Filter ERROR lines from /tmp/raw.log into /tmp/errors.log"
-  - "Write the count of error lines to /tmp/error_count"
+  - "Locate the config file under /etc/app containing 'DEBUG=on'"
+  - "Change that single line to DEBUG=off"
+  - "Confirm no file under /etc/app still has DEBUG=on"
 
 hints:
-  - "`grep ERROR /tmp/raw.log > /tmp/errors.log` filters and writes."
-  - "`wc -l < /tmp/errors.log` gives the count without the filename noise."
-  - "Chain them: filter, write, then count what you wrote."
+  - "You don't search by hand. `grep -rn 'DEBUG=on' /etc/app` finds the file and the line number."
+  - "Once you know the file, edit it: `sed -i 's/DEBUG=on/DEBUG=off/' <file>`. Verify with grep again."
+  - "Confirm: `grep -r 'DEBUG=on' /etc/app` should return nothing after the fix. Then `check`."
 
 setup:
-  - "printf 'INFO boot complete\nERROR disk full on /dev/sda1\nINFO rotation ok\nERROR cpu temp 90C\nERROR network unreachable\nINFO cleanup done\n' > /tmp/raw.log"
-  - "rm -f /tmp/errors.log /tmp/error_count"
+  - "mkdir -p /etc/app"
+  - "for i in $(seq 1 50); do printf 'app.setting=true\\\\napp.debug=false\\\\n' > /etc/app/service-$i.conf; done"
+  - "printf 'app.name=vault-service\\\\nDEBUG=on\\\\napp.port=8443\\\\n' > /etc/app/vault-service.conf"
 
 checks:
-  - kind: cmd_stdout_eq
-    command: "wc -l < /tmp/errors.log"
-    expect: "3"
-    describe: "errors.log must hold exactly 3 error lines"
   - kind: cmd_stdout_contains
-    command: "cat /tmp/errors.log"
-    expect: "disk full"
-    describe: "errors.log must contain the disk-full error"
-  - kind: file_contains
-    path: /tmp/error_count
-    expect: "3"
-    describe: "error_count must record 3"
+    command: "grep -r 'DEBUG=off' /etc/app/vault-service.conf"
+    expect: "DEBUG=off"
+    describe: "the offending file must be flipped to DEBUG=off"
+  - kind: cmd_stdout_eq
+    command: "grep -rl 'DEBUG=on' /etc/app 2>/dev/null | wc -l"
+    expect: "0"
+    describe: "no config file under /etc/app may still contain DEBUG=on"
 
 solution:
-  - "grep ERROR /tmp/raw.log > /tmp/errors.log"
-  - "wc -l < /tmp/errors.log > /tmp/error_count"
+  - "sed -i 's/DEBUG=on/DEBUG=off/' /etc/app/vault-service.conf"
 
 scoring:
-  base: 200
+  base: 150
   hint_penalty: 30
   par_seconds: 120

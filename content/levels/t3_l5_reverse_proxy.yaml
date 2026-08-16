@@ -1,63 +1,55 @@
 id: t3_l5_reverse_proxy
 tier: 3
 order: 5
-title: "Reverse Proxy"
+title: "The Job That Runs at Midnight"
 requires_real_vm: true
 prerequisites: [t3_l4_service_discovery]
 
 intro: |
-  20:55. The NOC's "load balancer" is a vendor box that terminates TLS on 443
-  and forwards to /app — but /app is a symlink to /dev/null. The real app
-  listens on 127.0.0.1:8080. Spin up nginx (or socat) that terminates 443 and
-  forwards honestly to 8080, drop a cert at /etc/ssl/student-app.crt, and prove
-  the proxy hits the real backend.
+  That service name from the journal — it's a timer. `sys-maintenance.timer`,
+  running nightly at 3:33 AM, reaching across the river to an address GREERSON
+  left behind. It's enabled, persistent — the one thing GREERSON actually
+  finished. Now it's pointing at someone who shouldn't have it.
 
-  Terminate TLS. Forward truth.
+  Stop it, disable it, and MASK it so it can never fire again. Masking is the
+  deadbolt — it makes the unit impossible to start at all until a human
+  deliberately unmasks it.
 
 victory_text: |
-  The reverse proxy listens on 443 and forwards to 8080, the cert is in place,
-  and /app is corrected. The NOC's 443 terminates to a black hole; yours
-  terminates to the app.
+  `masked`. The deadbolt slides home. Whatever was reaching across the river
+  every midnight will not do it again — not tonight, not at reboot, not until
+  a human with the full story unmasks it. (+180)
 
 objectives:
-  - "Configure a reverse proxy on 443 → 8080"
-  - "Install the TLS cert at /etc/ssl/student-app.crt"
-  - "Correct the /app symlink"
+  - "Stop the sys-maintenance.timer immediately"
+  - "Disable it so it won't start at boot"
+  - "Mask it so it cannot be started at all"
+  - "Confirm `systemctl is-enabled sys-maintenance.timer` reports masked"
 
 hints:
-  - "Write an nginx server block / socat listener for 443."
-  - "ln -s /app /var/www/student-app or point to the real backend."
-  - "The cert file must contain BEGIN CERTIFICATE."
+  - "Three steps: stop, disable, mask. `sudo systemctl stop sys-maintenance.timer`, then `disable`, then `mask`."
+  - "Mask is stronger than disable — it links the unit to /dev/null, making it impossible to start."
+  - "Verify: `systemctl is-enabled sys-maintenance.timer` → 'masked'. Also `systemctl list-timers --all` should not list it."
 
 setup:
-  - "mkdir -p /etc/ssl /etc/nginx/sites-available /var/www /app"
-  - "ln -sfn /dev/null /app/backend"
-  - "printf 'BAD_CERT\\n' > /etc/ssl/student-app.crt"
-  - "rm -f /etc/nginx/sites-available/student-app"
+  - "mkdir -p /etc/systemd/system"
+  - "printf '[Unit]\\\\nDescription=System Maintenance\\\\n\\\\n[Timer]\\\\nOnCalendar=*-*-* 03:33:00\\\\n\\\\n[Install]\\\\nWantedBy=timers.target\\\\n' > /etc/systemd/system/sys-maintenance.timer"
+  - "printf '[Unit]\\\\nDescription=Maintenance Script\\\\n\\\\n[Service]\\\\nType=oneshot\\\\nExecStart=/bin/true\\\\n' > /etc/systemd/system/sys-maintenance.service"
+  - "systemctl daemon-reload 2>/dev/null || true"
+  - "systemctl enable --now sys-maintenance.timer 2>/dev/null || true"
 
 checks:
-  - kind: file_contains
-    path: /etc/ssl/student-app.crt
-    expect: "BEGIN CERTIFICATE"
-    describe: "the TLS cert must be valid (BEGIN CERTIFICATE)"
-  - kind: file_exists
-    path: /etc/nginx/sites-available/student-app
-    describe: "the reverse proxy config must exist"
-  - kind: file_contains
-    path: /etc/nginx/sites-available/student-app
-    expect: "127.0.0.1:8080"
-    describe: "the proxy must target the real backend on 8080"
-  - kind: file_exists
-    path: /app/backend
-    describe: "the /app/backend symlink must resolve to a real target"
+  - kind: cmd_stdout_eq
+    command: "systemctl is-enabled sys-maintenance.timer"
+    expect: "masked"
+    describe: "the timer must be masked (impossible to start)"
 
 solution:
-  - "printf '-----BEGIN CERTIFICATE-----\\nMIIFakeCertForStudentApp\\n-----END CERTIFICATE-----\\n' > /etc/ssl/student-app.crt"
-  - "printf 'server {\\n  listen 443 ssl;\\n  server_name student-app;\\n  ssl_certificate /etc/ssl/student-app.crt;\\n  location / { proxy_pass http://127.0.0.1:8080; }\\n}\\n' > /etc/nginx/sites-available/student-app"
-  - "ln -sfn /var/www/student-app /app/backend"
-  - "mkdir -p /var/www/student-app && printf 'app ok\\n' > /var/www/student-app/index.html"
+  - "systemctl stop sys-maintenance.timer"
+  - "systemctl disable sys-maintenance.timer"
+  - "systemctl mask sys-maintenance.timer"
 
 scoring:
-  base: 450
+  base: 180
   hint_penalty: 30
-  par_seconds: 300
+  par_seconds: 120

@@ -136,11 +136,11 @@ def test_render_tier_ladder_shows_current_and_next(tmp_path):
     c = load_campaign_for_progress()
     p = Progress(root=tmp_path, campaign=c)
     out = render_tier_ladder(c, p)
-    # at the start: current = First Shift [1], next = Directory Layout (locked)
+    # at the start: current = First Shift [1], next = Lost in the Filesystem (locked)
     assert "[1]" in out
     assert "· First Shift" in out
     assert "✺" in out  # next level is locked
-    assert "Directory Layout" in out
+    assert "Lost in the Filesystem" in out
 
 
 def test_render_tier_ladder_advances_after_complete(tmp_path):
@@ -150,5 +150,5 @@ def test_render_tier_ladder_advances_after_complete(tmp_path):
     p = Progress(root=tmp_path, campaign=c)
     p.complete("t0_l1_first_shift")
     out = render_tier_ladder(c, p)
-    assert "· Directory Layout" in out  # now the current ready mission
+    assert "· Lost in the Filesystem" in out  # now the current ready mission
 

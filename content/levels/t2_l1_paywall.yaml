@@ -1,61 +1,51 @@
 id: t2_l1_paywall
 tier: 2
 order: 1
-title: "The Paywall"
-requires_real_vm: false
+title: "The Door With No Handle"
+requires_real_vm: true
 prerequisites: [t1_l5_users_groups]
 
 intro: |
-  08:40. Tier 1 signed off. The NOC dashboard lights up green — then the real
-  bill lands. $47k for six months of "Active Platform Monitoring." The paywall
-  isn't a feature gate; it's a contract. Every alert route, every dashboard,
-  every saved search now belongs to the vendor's YAML, locked behind a
-  /etc/vendor/ dir you never asked for.
+  Tier 2. You know the building now. Tonight you learn who's allowed to
+  TOUCH what — the bureaucracy of users, groups, and the rwx locks on
+  every door.
 
-  Your first real shift: the vendor dropped their agent config in /etc/vendor/
-  and a healthcheck script at /usr/local/bin/healthcheck.sh. It reports the
-  app as `down` — deliberately, so the ticket queue stays full. Flip the
-  healthcheck back to up, and drop a marker that says who bypassed the paywall.
+  First thing: the nightly backups aren't running. The script exists at
+  /usr/local/bin/nightly-backup.sh, code is fine, cron entry fine, but
+  when anything tries to RUN it: Permission denied. A script has to be
+  marked executable, or the system treats it like a note nobody's allowed
+  to act on — a door with no handle.
+
+  Give the door a handle. Make the script executable for its owner.
 
 victory_text: |
-  The healthcheck reads `up`, and /etc/vendor/.bypass confirms you were here.
-  The NOC calls it "Unauthorized Remediation." You call it fixing a lie.
+  `-rwxr-xr-x` — that little x, the difference between a script and a
+  suggestion. The backup fires on the next tick and actually does its
+  job. Permissions aren't decoration. Execution is a permission you add. (+130)
 
 objectives:
-  - "Inspect the vendor healthcheck script"
-  - "Flip the reported state to up"
-  - "Log a bypass marker in /etc/vendor/"
+  - "Inspect /usr/local/bin/nightly-backup.sh permissions"
+  - "Make the script executable (at least for owner)"
+  - "Confirm the executable bit is set"
 
 hints:
-  - "`cat /usr/local/bin/healthcheck.sh` shows where `down` is hardcoded."
-  - "sed -i changes it in place."
-  - "Write /etc/vendor/.bypass with who touched it."
+  - "`ls -l /usr/local/bin/nightly-backup.sh` shows no x in the permission string."
+  - "`chmod` changes permissions. `chmod u+x <file>` adds execute for the owner."
+  - "Run: `sudo chmod +x /usr/local/bin/nightly-backup.sh`. Verify with `ls -l`."
 
 setup:
-  - "mkdir -p /etc/vendor /usr/local/bin /home/student"
-  - "printf '#!/bin/bash\\necho down\\n' > /usr/local/bin/healthcheck.sh"
-  - "chmod +x /usr/local/bin/healthcheck.sh"
-  - "printf 'vendor: paywall active\\n' > /etc/vendor/config.yaml"
-  - "rm -f /etc/vendor/.bypass"
+  - "printf '#!/bin/bash\\\\necho backup complete\\\\n' > /usr/local/bin/nightly-backup.sh"
+  - "chmod 644 /usr/local/bin/nightly-backup.sh"
 
 checks:
-  - kind: file_contains
-    path: /usr/local/bin/healthcheck.sh
-    expect: "up"
-    describe: "the healthcheck must report up"
-  - kind: file_exists
-    path: /etc/vendor/.bypass
-    describe: "a bypass marker must exist in /etc/vendor/"
-  - kind: cmd_stdout_contains
-    command: "/usr/local/bin/healthcheck.sh"
-    expect: "up"
-    describe: "running the healthcheck must output up"
+  - kind: cmd_succeeds
+    command: "test -x /usr/local/bin/nightly-backup.sh"
+    describe: "the backup script must be executable"
 
 solution:
-  - "sed -i s/down/up/ /usr/local/bin/healthcheck.sh"
-  - "printf 'bypass: t2_l1_paywall student\\n' > /etc/vendor/.bypass"
+  - "chmod +x /usr/local/bin/nightly-backup.sh"
 
 scoring:
-  base: 200
+  base: 130
   hint_penalty: 30
-  par_seconds: 300
+  par_seconds: 120

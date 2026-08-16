@@ -1,56 +1,46 @@
 id: t5_l2_alertmanager_routing
 tier: 5
 order: 2
-title: "Alertmanager Routing"
+title: "The Locksmith's Ghost"
 requires_real_vm: true
 prerequisites: [t5_l1_prometheus_monitoring]
 
 intro: |
-  10:35. Prometheus scrapes. Alerts fire. Alertmanager catches them — and
-  routes them to the NOC's slack channel by default. The paywall's "incident
-  mgmt" is a single receiver. Your job: add a route that fires student alerts
-  to your own receiver (pager: student), and make the default receiver a
-  dead-letter so the NOC's noise drops.
+  You named the ghost: 198.51.100.66. Now find what he left behind —
+  identity. A backdoor account with UID 0 is root-equivalent; an
+  unauthorized wheel member can sudo to root. There should be exactly
+  one UID-0 account (root). Audit the accounts, strip the rogue
+  identity, and confirm the count is back to one.
 
 victory_text: |
-  Alertmanager routes student-critical alerts to the student receiver, and the
-  default goes nowhere by default. The NOC's pager stays quiet; yours rings.
+  One UID 0 again. The rogue account is gone. The key the Ferryman cut
+  for himself is snapped. (+180)
 
 objectives:
-  - "Add a receiver named `student`"
-  - "Route alerts matching severity=critical to the student receiver"
-  - "Set the default receiver to dead-letter"
+  - "Audit /etc/passwd for UID-0 accounts"
+  - "Find and remove the backdoor account"
+  - "Confirm only root has UID 0"
 
 hints:
-  - "Edit /etc/alertmanager/alertmanager.yml."
-  - "Add a route with match severity=critical and receiver: student."
-  - "Set receivers: default → slack, student → email you."
+  - "`awk -F: '($3==0){print $1}' /etc/passwd` lists all UID-0 accounts."
+  - "`sudo userdel -r <username>'` removes the account and its files."
+  - "Confirm with the awk one-liner — only 'root' should remain."
 
 setup:
-  - "mkdir -p /etc/alertmanager"
-  - "printf 'global:\\n  resolve_timeout: 5m\\nroute:\\n  receiver: noc-slack\\nreceivers:\\n  - name: noc-slack\\n    slack_configs:\\n      - channel: alerts\\n' > /etc/alertmanager/alertmanager.yml"
-  - "rm -f /tmp/.am-reload"
+  - "useradd -u 0 -o -M backdoor 2>/dev/null || true"
+  - "echo 'backdoor:x:0:0:backdoor:/root:/bin/bash' >> /etc/passwd 2>/dev/null || true"
 
 checks:
-  - kind: file_contains
-    path: /etc/alertmanager/alertmanager.yml
-    expect: "student"
-    describe: "a student receiver must exist"
-  - kind: file_contains
-    path: /etc/alertmanager/alertmanager.yml
-    expect: "severity"
-    describe: "a route must match on severity"
-  - kind: file_exists
-    path: /tmp/.am-reload
-    describe: "the alertmanager reload marker must exist"
+  - kind: cmd_stdout_eq
+    command: "awk -F: '($3==0){print $1}' /etc/passwd | sort | uniq"
+    expect: "root"
+    describe: "only root should have UID 0"
 
 solution:
-  - "sed -i 's/receiver: noc-slack/receiver: dead-letter/' /etc/alertmanager/alertmanager.yml"
-  - "printf '\\n  - name: student\\n    webhook_configs:\\n      - url: http://127.0.0.1:9797/hook\\n' >> /etc/alertmanager/alertmanager.yml"
-  - "sed -i '/route:/a\\  routes:\\n    - match:\\n        severity: critical\\n      receiver: student' /etc/alertmanager/alertmanager.yml"
-  - "printf 'reload: student receiver added\\n' > /tmp/.am-reload"
+  - "sudo userdel -r backdoor 2>/dev/null; true"
+  - "sed -i '/backdoor/d' /etc/passwd 2>/dev/null; true"
 
 scoring:
-  base: 500
+  base: 180
   hint_penalty: 30
-  par_seconds: 300
+  par_seconds: 120

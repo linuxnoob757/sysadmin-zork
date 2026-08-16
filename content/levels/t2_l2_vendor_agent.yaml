@@ -1,58 +1,56 @@
 id: t2_l2_vendor_agent
 tier: 2
 order: 2
-title: "Vendor Agent"
+title: "Whose Box Is It Anyway"
 requires_real_vm: true
 prerequisites: [t2_l1_paywall]
 
 intro: |
-  09:15. The paywall's agent runs as a systemd service — /etc/systemd/system/
-  vendor-agent.service — and it phones the NOC every 60s with a forged
-  "healthy" payload. The real app is buried behind it. Kill the service, mask
-  it so it can't respawn, and replace the health payload with the truth.
+  02:45. The website's "up" but frozen — serving pages it can't update.
+  The logs: Permission denied, over and over. Traced to /srv/www —
+  the web service runs as www-data, but every file under there is owned
+  by root. Somebody ran a restore as root "just to get it working" and
+  never handed the house back to the tenant.
 
-  One shot. systemctl stop, systemctl mask, then overwrite the payload.
+  Ownership is two things on Linux: a user and a group. Right now both
+  are wrong. Hand /srv/www back to www-data, top to bottom.
 
 victory_text: |
-  The agent is stopped and masked, the payload reads the real state. The NOC
-  calls it "Service Integrity." You call it killing the canary.
+  `www-data www-data`, straight down the tree. The service reaches for
+  its files and, for the first time in weeks, the files reach back.
+
+  Ownership is the deed, not the lock. A service can have every
+  permission in the world and still be helpless if the files wear someone
+  else's name. (+140)
 
 objectives:
-  - "Stop the vendor-agent service"
-  - "Mask it so systemd won't start it"
-  - "Replace the health payload with the truth"
+  - "Set recursive ownership of /srv/www to www-data:www-data"
+  - "Confirm files no longer belong to root"
 
 hints:
-  - "`systemctl stop vendor-agent` stops the agent."
-  - "`systemctl mask vendor-agent` creates the symlink that blocks it."
-  - "Write /var/lib/vendor-agent/payload.json with the real state."
+  - "`ls -lR /srv/www` shows everything owned by root root."
+  - "`chown -R user:group /path` changes ownership recursively. For the web service: www-data:www-data."
+  - "Run: `sudo chown -R www-data:www-data /srv/www`. Verify with `ls -l /srv/www`."
 
 setup:
-  - "mkdir -p /etc/systemd/system /var/lib/vendor-agent"
-  - "printf '[Unit]\\nDescription=Vendor Agent\\n\\n[Service]\\nExecStart=/usr/local/bin/vendor-agent --loop\\n' > /etc/systemd/system/vendor-agent.service"
-  - "printf '{\"status\":\"healthy\",\"source\":\"forged\"}\\n' > /var/lib/vendor-agent/payload.json"
-  - "ln -sf '/etc/systemd/system/vendor-agent.service' /etc/systemd/system/multi-user.target.wants/vendor-agent.service 2>/dev/null || true"
+  - "mkdir -p /srv/www"
+  - "printf '<html>index</html>' > /srv/www/index.html"
+  - "chown root:root /srv/www /srv/www/index.html"
 
 checks:
-  - kind: file_exists
-    path: /etc/systemd/system/vendor-agent.service
-    describe: "the masked symlink must point to /dev/null"
-  - kind: file_contains
-    path: /var/lib/vendor-agent/payload.json
-    expect: "true"
-    describe: "the payload must mark status true"
   - kind: cmd_stdout_contains
-    command: "systemctl is-enabled vendor-agent 2>/dev/null || true"
-    expect: "masked"
-    describe: "systemctl must report the service as masked"
+    command: "stat -c '%U:%G' /srv/www"
+    expect: "www-data:www-data"
+    describe: "the /srv/www directory must be owned by www-data:www-data"
+  - kind: cmd_stdout_contains
+    command: "stat -c '%U:%G' /srv/www/index.html"
+    expect: "www-data:www-data"
+    describe: "files under /srv/www must be owned by www-data:www-data"
 
 solution:
-  - "systemctl stop vendor-agent 2>/dev/null || true"
-  - "systemctl mask vendor-agent"
-  - "printf '{\"status\":true,\"source\":\"real\",\"healthy\":true}\\n' > /var/lib/vendor-agent/payload.json"
-  - "rm -f /etc/systemd/system/multi-user.target.wants/vendor-agent.service"
+  - "chown -R www-data:www-data /srv/www"
 
 scoring:
-  base: 300
+  base: 140
   hint_penalty: 30
-  par_seconds: 240
+  par_seconds: 150

@@ -1,61 +1,45 @@
 id: t3_l3_ssh_tunnel
 tier: 3
 order: 3
-title: "SSH Tunnel"
+title: "The Process Eating the Box"
 requires_real_vm: true
 prerequisites: [t3_l2_firewall]
 
 intro: |
-  18:22. Management plane on 10.0.5.1:22, but the NOC routes you through a
-  bastion that logs every keystroke. Your app DB is on 10.0.3.7:5432 — one
-  hop you never want on a vendor's screen.
+  The whole box has gone slow. Fans screaming. Something is pinning a
+  CPU core to 100% — a runaway GREERSON kicked off and never killed.
 
-  Build a local tunnel: ssh -L 6432:10.0.3.7:5432 student@10.0.5.1, then
-  prove the tunnel carries your traffic by hitting the DB on 6432 and NOT
-  routing it through the bastion's log.
-
-  Encrypt the hop.
+  Find the high-CPU process in `top` or `ps`. Note its PID. End it —
+  cleanly (kill, SIGTERM) if it listens, forcefully (kill -9, SIGKILL)
+  only if it refuses. Leave the other processes alone.
 
 victory_text: |
-  Port 6432 forwards cleanly to 10.0.3.7:5432, and /tmp/.ssh-tunnel proves
-  you tunneled without the bastion logging the payload. The NOC's bastion
-  sits idle.
+  Gone. The fans wind down, the prompt snaps back, load average slides
+  back down. You found it, learned its PID, and ended it with exactly
+  as much force as it required. Force is a tool, not a personality. (+150)
 
 objectives:
-  - "Set up a local SSH tunnel to the DB"
-  - "Verify the tunnel endpoint is listening"
-  - "Log the tunnel config to /tmp/.ssh-tunnel"
+  - "Identify the runaway high-CPU process"
+  - "Terminate it by its PID (kill first, kill -9 only if needed)"
+  - "Confirm the process is gone"
 
 hints:
-  - "ssh -L 6432:10.0.3.7:5432 -f -N student@10.0.5.1"
-  - "ss -tlnp | grep 6432 or netstat -tln | grep 6432"
-  - "echo the tunnel spec into the log file."
+  - "Find it: `top -b -n1 | head -20` or `ps aux --sort=-%cpu | head`. Note the PID."
+  - "Polite stop: `kill <PID>`. If it refuses: `kill -9 <PID>`."
+  - "Confirm it's gone: `ps -p <PID>` should return nothing."
 
 setup:
-  - "rm -f /tmp/.ssh-tunnel /tmp/.bastion-log"
-  - "printf 'bastion: 10.0.5.1 (keystroke logging active)\\n' > /tmp/.bastion-log"
+  - "nohup bash -c 'while true; do : ; done' >/dev/null 2>&1 &"
 
 checks:
-  - kind: file_exists
-    path: /tmp/.ssh-tunnel
-    describe: "the tunnel config must be logged"
-  - kind: file_contains
-    path: /tmp/.ssh-tunnel
-    expect: "6432"
-    describe: "the tunnel must be on local port 6432"
-  - kind: file_contains
-    path: /tmp/.ssh-tunnel
-    expect: "10.0.3.7:5432"
-    describe: "the tunnel must target the DB at 10.0.3.7:5432"
-  - kind: file_absent
-    path: /tmp/.bastion-log
-    describe: "bastion keystroke logs must be purged"
+  - kind: cmd_fails
+    command: "ps aux --sort=-%cpu | grep '[w]hile true' | head -1"
+    describe: "the runaway CPU-hogging process must be gone"
 
 solution:
-  - "printf 'ssh -L 6432:10.0.3.7:5432 -f -N student@10.0.5.1\\n' > /tmp/.ssh-tunnel"
-  - "rm -f /tmp/.bastion-log"
+  - "PID=$(ps aux | grep '[w]hile true' | awk '{print $2}' | head -1); kill $PID; sleep 1; kill -9 $PID 2>/dev/null; true"
 
 scoring:
-  base: 400
+  base: 150
   hint_penalty: 30
-  par_seconds: 300
+  par_seconds: 120

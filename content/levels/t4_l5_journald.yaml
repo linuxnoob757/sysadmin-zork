@@ -1,68 +1,51 @@
 id: t4_l5_journald
 tier: 4
 order: 5
-title: "Journald Forwarding"
+title: "The Front Door"
 requires_real_vm: true
 prerequisites: [t4_l4_auditd]
 
 intro: |
-  01:30. Logs are the NOC's blood — and they're coagulated. journald keeps
-  nothing: Storage=preserve is unset, ForwardToSyslog=false, no remote syslog
-  target. /var/log/journal is empty. Fix the journal so it keeps state and
-  ships a copy to 10.0.0.1, the real syslog collector you run yourself.
-
-  Keep the log. Own the wire.
+  The last and most important lock: SSH itself. The logs show thousands of
+  failed login attempts — brute force. And root can log in directly, and
+  password auth is on. Disable direct root login and password authentication.
+  Keys only.
 
 victory_text: |
-  journald persists to disk, forwards to your syslog at 10.0.0.1, and the
-  journal holds entries. The NOC's log aggregator finally sees traffic that
-  isn't theirs.
+  sshd -t passes clean, sshd reloaded. The brute-force stops. Root can't
+  be reached from outside. Only keys open the door now. (+180)
 
 objectives:
-  - "Enable journal persistence (Storage=persistent)"
-  - "Forward to a remote syslog at 10.0.0.1"
-  - "Create /var/log/journal so logs persist"
+  - "Set PermitRootLogin no in /etc/ssh/sshd_config"
+  - "Set PasswordAuthentication no in /etc/ssh/sshd_config"
+  - "Validate with sshd -t and restart sshd"
 
 hints:
-  - "Write /etc/systemd/journald.conf with Storage=persistent."
-  - "Set ForwardToSyslog=yes and ForwardToRemote=yes."
-  - "ForwardServer=10.0.0.1:514 sets the remote target."
+  - "Edit /etc/ssh/sshd_config with `sudo sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/'`."
+  - "And `sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/'`."
+  - "Validate: `sudo sshd -t`. Restart: `sudo systemctl restart sshd`. Verify: `sudo sshd -T | grep permitrootlogin` → no."
 
 setup:
-  - "mkdir -p /etc/systemd /var/log/journal /tmp"
-  - "printf '[Journal]\\nStorage=auto\\nForwardToSyslog=no\\nForwardToRemote=no\\n' > /etc/systemd/journald.conf"
-  - "rm -rf /var/log/journal/*"
-  - "printf 'storage: auto, no forward\\n' > /tmp/.journald-state"
+  - "sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config 2>/dev/null || true"
+  - "sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config 2>/dev/null || true"
 
 checks:
-  - kind: file_contains
-    path: /etc/systemd/journald.conf
-    expect: "Storage=persistent"
-    describe: "journald must persist to disk"
-  - kind: file_contains
-    path: /etc/systemd/journald.conf
-    expect: "ForwardToSyslog=yes"
-    describe: "journald must forward to syslog"
-  - kind: file_contains
-    path: /etc/systemd/journald.conf
-    expect: "10.0.0.1"
-    describe: "journald must forward to the remote syslog at 10.0.0.1"
-  - kind: file_exists
-    path: /var/log/journal
-    describe: "the journal directory must exist"
-  - kind: file_contains
-    path: /tmp/.journald-state
-    expect: "fixed"
-    describe: "the journald state must be marked fixed"
+  - kind: cmd_stdout_contains
+    command: "sshd -T 2>/dev/null | grep '^permitrootlogin '"
+    expect: "no"
+    describe: "PermitRootLogin must be disabled"
+  - kind: cmd_stdout_contains
+    command: "sshd -T 2>/dev/null | grep '^passwordauthentication '"
+    expect: "no"
+    describe: "PasswordAuthentication must be disabled"
 
 solution:
-  - "printf '[Journal]\\nStorage=persistent\\nForwardToSyslog=yes\\nForwardToRemote=yes\\n' >> /etc/systemd/journald.conf"
-  - "printf 'ForwardServer=10.0.0.1:514\\n' >> /etc/systemd/journald.conf"
-  - "mkdir -p /var/log/journal"
-  - "touch /var/log/journal/.journal-initialized"
-  - "printf 'storage: persistent, forward to 10.0.0.1, fixed\\n' > /tmp/.journald-state"
+  - "sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config"
+  - "sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config"
+  - "sshd -t"
+  - "systemctl restart sshd"
 
 scoring:
-  base: 400
+  base: 180
   hint_penalty: 30
-  par_seconds: 300
+  par_seconds: 150
